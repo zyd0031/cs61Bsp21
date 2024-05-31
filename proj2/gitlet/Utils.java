@@ -14,9 +14,16 @@ import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Formatter;
 import java.util.List;
+import gitlet.exception.GitletException;
+
 
 
 /** Assorted utilities.
@@ -136,6 +143,11 @@ class Utils {
         }
     }
 
+    static void writeContents(String filePath, String content){
+        File file = new File(filePath);
+        writeContents(file, content);
+    }
+
     /** Return an object of type T read from FILE, casting it to EXPECTEDCLASS.
      *  Throws IllegalArgumentException in case of problems. */
     static <T extends Serializable> T readObject(File file,
@@ -235,5 +247,24 @@ class Utils {
     static void message(String msg, Object... args) {
         System.out.printf(msg, args);
         System.out.println();
+    }
+
+    /**
+     * convert LocalDateTime to commit Date
+     */
+    static String toCommitDate(LocalDateTime now){
+        ZoneOffset offset = ZoneId.systemDefault().getRules().getOffset(now);
+        ZonedDateTime zonedDateTime = now.atZone(ZoneId.systemDefault());
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss yyyy");
+        String formattedDateTime = now.format(formatter);
+
+        String offsetString = String.format("%s%02d%02d",
+                offset.getTotalSeconds() >= 0 ? "+" : "-",
+                Math.abs(offset.getTotalSeconds() / 3600),
+                Math.abs(offset.getTotalSeconds() % 3600) / 60);
+
+        String commitTime = formattedDateTime + " " + offsetString;
+        return commitTime;
     }
 }
