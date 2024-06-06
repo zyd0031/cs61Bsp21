@@ -25,12 +25,16 @@ public class Tree extends GitletObject implements Serializable {
         return "Tree";
     }
 
+    public List<GitletObject> getChildren(){
+        return children;
+    }
+
     @Override
-    public String getSha1Hash(){
+    public String getSha1(){
         List<Object> entries = new ArrayList<>();
         for (GitletObject child : children) {
             String mode = child instanceof Blob ? NORMAL_FILE : DIRECTORY;
-            String entry = mode + " " + child.getFileName()+ "\0" + child.getSha1Hash();
+            String entry = mode + " " + child.getFileName()+ "\0" + child.getSha1();
             entries.add(entry);
         }
         return Utils.sha1(entries);

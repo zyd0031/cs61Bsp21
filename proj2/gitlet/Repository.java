@@ -71,25 +71,21 @@ public class Repository {
      */
     private void makeFirstCommit(){
         // build Tree and persistence it
-        Tree emptyTree = buildTree();
+        Tree emptyTree = GitletTreeHandler.buildTree(CWD);
 
         // handle commit
         Instant epoch0 = Instant.EPOCH;
         LocalDateTime initialCommitTime = LocalDateTime.ofInstant(epoch0, ZoneOffset.UTC);
         String msg = "initial commit";
         Commit initCommit = new Commit(initialCommitTime, msg, null, null, emptyTree);
-
-        String commitUid = initCommit.getsha1();
-        File commitDir = join(OBJECT_DIR, commitUid.substring(0, 2));
-        commitDir.mkdir();
-        Utils.writeObject(new File(commitDir, commitUid.substring(2)), initCommit);
-
-        // create a master branch and point to the initial commit
-        File masterHead = join(BRANCH_HEAD_DIR, "master");
-        Utils.writeContents(masterHead, commitUid);
+        pstCommit(initCommit);
 
         // set the current branch to master
         Utils.writeContents(HEAD_FILE, "ref: refs/heads/master");
+
+        // create a master branch and point to the initial commit
+        File masterHead = join(BRANCH_HEAD_DIR, "master");
+        Utils.writeContents(masterHead, initCommit.getSha1());
     }
 
     /**
@@ -126,15 +122,19 @@ public class Repository {
      * @param msg
      */
     public void commit(String msg){
-        Tree tree = buildTree();
+
+        Tree tree = GitletTreeHandler.buildTree(CWD);
 
         LocalDateTime time = LocalDateTime.now();
         List<String> parentCommits = Arrays.asList(getParentCommitID());
-        HashMap<String, String> stagedFiles = Utils.readObject(INDEX_FILE, Index.class).getStagedFiles();
+        Index index = Utils.readObject(INDEX_FILE, Index.class);
+        HashMap<String, String> stagedFiles = index.getStagedFiles();
         Commit commit = new Commit(time, msg, parentCommits, stagedFiles, tree);
 
-
-
+        pstCommit(commit);
+        pstTree(tree);
+        clearStagedFiles(index);
+        updateCurrentBranch(commit.getSha1());
     }
 
     /**
@@ -157,7 +157,7 @@ public class Repository {
         }
 
         /**
-         * 2. add files to the staging area
+         * 2. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
          * must meet the conditions
          * a. not exists in the staging area
          * b. exists in the staging area, but the content changed
@@ -165,12 +165,13 @@ public class Repository {
          */
         for (String filePath : filePaths){
             Blob blob = new Blob(filePath);
-            String sha1 = blob.getSha1Hash();
+            String sha1 = blob.getSha1();
             HashMap<String, String> lastCommitFilesContents = getLastCommitFilesContents();
             if (index.containsFile(filePath)){
                 // file in the stagde area
                 String stagedsha1 = index.getSha1(filePath);
                 if (! sha1.equals(stagedsha1)){
+                    pstBolb(blob);
                     index.addFile(filePath, sha1);
                 }
             }else{
@@ -179,9 +180,11 @@ public class Repository {
                 if (lastCommitFiles.containsKey(filePath)){
                     String lastCommitsha1 = lastCommitFiles.get(filePath);
                     if (! sha1.equals(lastCommitsha1)){
+                        pstBolb(blob);
                         index.addFile(filePath, sha1);
                     }
                 }else{
+                    pstBolb(blob);
                     index.addFile(filePath, sha1);
                 }
             }
@@ -279,15 +282,66 @@ public class Repository {
     }
 
     /**
-     * build tree and store tree
+     * persistence Tree
      */
-    private static Tree buildTree(){
-        Tree tree = GitletTreeBuilder.buildTree(CWD);
-        String treeUid = tree.getSha1Hash();
-        File treeDir = join(OBJECT_DIR, treeUid.substring(0,2));
-        treeDir.mkdir();
-        Utils.writeObject(new File(treeDir, treeUid.substring(2)), tree);
-        return tree;
+    private void pstTree(Tree tree){
+        String sha1 = tree.getSha1();
+        File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));
+        objectFile.mkdir();
+        Utils.writeObject(new File(objectFile, sha1.substring(2)), tree);
+        List<GitletObject> children = tree.getChildren();
+        if (! children.isEmpty()){
+            for (GitletObject child : children){
+                if (child instanceof Blob){
+                    Blob blob = (Blob) child;
+                    pstBolb(blob);
+                }else{
+                    Tree subtree = (Tree) child;
+                    pstTree(subtree);
+                }
+            }
+        }
     }
+
+    /**
+     * persistence Blob
+     */
+    private void pstBolb(Blob blob){
+        String sha1 = blob.getSha1();
+        File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));
+        objectFile.mkdir();
+        Utils.writeObject(new File(objectFile, sha1.substring(2)), blob);
+    }
+
+    /**
+     * persistence Tree
+     */
+    private void pstCommit(Commit commit){
+        String sha1 = commit.getSha1();
+        File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));
+        objectFile.mkdir();
+        Utils.writeObject(new File(objectFile, sha1.substring(2)), commit);
+    }
+
+    /**
+     * clear staged files from index
+     */
+    private void clearStagedFiles(Index index){
+        index.clearStagedFiles();
+        Utils.writeObject(INDEX_FILE, index);
+    }
+
+    /**
+     * update the current branch reference to point to the new commit
+     */
+    private void updateCurrentBranch(String commitId){
+        String headContent = Utils.readContentsAsString(HEAD_FILE).trim();
+        String currentBranch = headContent.substring(5).trim();
+        File branchFile = new File(GITLET_DIR, currentBranch);
+        Utils.writeContents(branchFile, commitId);
+    }
+
+
+
 
 }

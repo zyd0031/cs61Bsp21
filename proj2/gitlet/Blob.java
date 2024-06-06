@@ -22,7 +22,7 @@ public class Blob extends GitletObject implements Serializable {
     }
 
     @Override
-    public String getSha1Hash(){
+    public String getSha1(){
         File file = getFile();
         byte[] content = Utils.readContents(file);
         String header = "blob " + content.length + "\0";

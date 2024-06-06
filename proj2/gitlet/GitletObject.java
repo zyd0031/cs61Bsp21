@@ -1,12 +1,14 @@
 package gitlet;
 
 import java.io.File;
+import java.io.Serializable;
 
 /**
  * The Git Object, map to bolb/tree
  */
-public abstract class GitletObject {
+public abstract class GitletObject implements Serializable {
 
+    private static final long serialVersionUID = 14324132L;
     private String filePath;
 
     public GitletObject(String filePath) {
@@ -22,6 +24,7 @@ public abstract class GitletObject {
         return new File(filePath);
     }
 
+
     public abstract String getType();
-    public abstract String getSha1Hash();
+    public abstract String getSha1();
 }

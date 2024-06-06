@@ -32,5 +32,9 @@ public class Index implements Serializable {
         return stagedFiles.get(file);
     }
 
+    public void clearStagedFiles(){
+        stagedFiles.clear();
+    }
+
 
 }

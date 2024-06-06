@@ -56,7 +56,7 @@ public class Commit implements Serializable {
 
     private String sha1(){
         StringBuilder content = new StringBuilder();
-        content.append("tree").append(tree.getSha1Hash()).append("\n");
+        content.append("tree").append(tree.getSha1()).append("\n");
         if (parentCommits != null) {
             for (String s : parentCommits) {
                 content.append("parent ").append(s).append("\n");
@@ -70,7 +70,7 @@ public class Commit implements Serializable {
         return Utils.sha1(header, string);
     }
 
-    public String getsha1(){
+    public String getSha1(){
         return sha1HashCode;
     }
 
