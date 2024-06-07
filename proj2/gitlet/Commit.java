@@ -15,7 +15,7 @@ import static gitlet.Utils.toCommitDate;
  *
  *  @author Yudie Zheng
  */
-public class Commit implements Serializable {
+public class Commit implements Persistable {
     /**
      * List all instance variables of the Commit class here with a useful
      * comment above them describing what that variable represents and how that
@@ -28,18 +28,14 @@ public class Commit implements Serializable {
     private String message;
     private LocalDateTime commitTime;
     private String sha1HashCode;
-    private List<String> parentCommits;
+    private String parentCommit;
     private HashMap<String, String> stagedfiles;
     private Tree tree;
 
 
-
-
-
-    /* TODO: fill in the rest of this class. */
-    public Commit(LocalDateTime time, String message, List<String> parentCommits, HashMap<String, String> stagedfiles, Tree tree) {
+    public Commit(LocalDateTime time, String message, String parentCommit, HashMap<String, String> stagedfiles, Tree tree) {
         this.message = message;
-        this.parentCommits = parentCommits;
+        this.parentCommit = parentCommit;
         this.commitTime = time;
         this.stagedfiles = stagedfiles;
         this.sha1HashCode = sha1();
@@ -54,13 +50,12 @@ public class Commit implements Serializable {
                 "\n      " + message;
     }
 
+
     private String sha1(){
         StringBuilder content = new StringBuilder();
         content.append("tree").append(tree.getSha1()).append("\n");
-        if (parentCommits != null) {
-            for (String s : parentCommits) {
-                content.append("parent ").append(s).append("\n");
-            }
+        if (parentCommit != null) {
+            content.append("parent ").append(parentCommit).append("\n");
         }
         content.append(commitTime.toEpochSecond(java.time.ZoneOffset.UTC)).append(" +0000\n");
         content.append(message).append("\n");
@@ -70,6 +65,7 @@ public class Commit implements Serializable {
         return Utils.sha1(header, string);
     }
 
+    @Override
     public String getSha1(){
         return sha1HashCode;
     }
@@ -82,8 +78,5 @@ public class Commit implements Serializable {
     public HashMap<String, String> getstagedFiles(){
         return stagedfiles;
     }
-
-
-
 
 }

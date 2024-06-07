@@ -2,6 +2,9 @@ package gitlet;
 
 import java.util.Arrays;
 
+import static gitlet.constant.MessageConstant.NO_COMMAND_ENTERED_MESSAGE;
+import static gitlet.constant.MessageConstant.NO_COMMIT_MESSAGE;
+
 /** Driver class for Gitlet, a subset of the Git version-control system.
  *  @author TODO
  */
@@ -11,9 +14,8 @@ public class Main {
      *  <COMMAND> <OPERAND1> <OPERAND2> ... 
      */
     public static void main(String[] args) {
-        // TODO: what if args is empty?
         if (args.length == 0) {
-            System.out.println("please enter the command");
+            System.out.println(NO_COMMAND_ENTERED_MESSAGE);
         }
         String firstArg = args[0];
         Repository repo = new Repository();
@@ -34,7 +36,13 @@ public class Main {
                 }
                 break;
             case "commit":
-                repo.commit(args[1]);
+                if (args.length == 1) {
+                    System.out.println(NO_COMMIT_MESSAGE);
+                    System.exit(0);
+                }else{
+                    repo.commit(args[1]);
+                }
+
         }
     }
 }

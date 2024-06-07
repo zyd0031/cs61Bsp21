@@ -2,42 +2,60 @@ package gitlet;
 
 import java.io.File;
 import java.io.Serializable;
+import java.sql.Array;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import static gitlet.constant.FileModeConstant.DIRECTORY;
 import static gitlet.constant.FileModeConstant.NORMAL_FILE;
 
-public class Tree extends GitletObject implements Serializable {
-    private final List<GitletObject> children = new ArrayList<>();
+public class Tree implements Persistable {
     private static final long SerialVersionUID = 2L;
+    // <filePath, Sha1Hash>
+    private HashMap<String, String> files;
 
-    public Tree(String filePath) {
-        super(filePath);
+    public Tree(Tree tree) {
+        this.files = new HashMap<>(tree.getFiles());
     }
 
-    public void addChild(GitletObject child){
-        children.add(child);
+    public Tree(HashMap<String, String> files) {
+        this.files = new HashMap<>(files);
     }
 
-    @Override
+    public Tree() {
+        this.files = new HashMap<>();
+    }
+
     public String getType(){
         return "Tree";
     }
 
-    public List<GitletObject> getChildren(){
-        return children;
+    public void addFile(String path, String hash){
+        files.put(path, hash);
+    }
+
+    public void removeFile(String path){
+        files.remove(path);
+    }
+
+    public HashMap<String, String> getFiles(){
+        return files;
+    }
+
+    public List<String> getFilesList(){
+        return new ArrayList<>(files.keySet());
     }
 
     @Override
     public String getSha1(){
-        List<Object> entries = new ArrayList<>();
-        for (GitletObject child : children) {
-            String mode = child instanceof Blob ? NORMAL_FILE : DIRECTORY;
-            String entry = mode + " " + child.getFileName()+ "\0" + child.getSha1();
-            entries.add(entry);
+        List<String> list = new ArrayList<>();
+        for (String filePath : files.keySet()) {
+            Blob blob = new Blob(filePath);
+            StringBuffer sb = new StringBuffer();
+            sb.append("100644 blob ").append(blob.getSha1()).append("\0").append(filePath);
+            list.add(sb.toString());
         }
-        return Utils.sha1(entries);
+        return Utils.sha1(list);
     }
-
 }

@@ -13,6 +13,8 @@ import java.time.Instant;
 
 import static gitlet.Utils.*;
 import static gitlet.constant.FailureCaseConstant.ALREADY_INITIALIZED;
+import static gitlet.constant.MessageConstant.NOT_IN_GITLET_DIR_MESSAGE;
+import static gitlet.constant.MessageConstant.NO_COMMIT_MESSAGE;
 
 // TODO: any imports you need here
 
@@ -36,15 +38,11 @@ public class Repository {
     public static final File BRANCH_HEAD_DIR = join(CWD, "refs", "heads");
     public static final File[] DIRS = {GITLET_DIR, HEAD_FILE, OBJECT_DIR, BRANCH_HEAD_DIR};
 
-    /** content of the 。/getlet/index file -----> HashMap<AbsoluateFilePath, sha1Hash>*/
+    /** content of the 。/getlet/index file -----> HashMap<FilePath, sha1Hash>*/
     // private HashMap<String, String> stagedFiles;
     /** last commit info */
     private HashMap<String, String> lastCommitFiles;
 
-    /* TODO: fill in the rest of this class. */
-
-    public Repository() {
-    }
 
     /**
      * initialize a repository, creating the necessary directories/fiiles
@@ -71,14 +69,14 @@ public class Repository {
      */
     private void makeFirstCommit(){
         // build Tree and persistence it
-        Tree emptyTree = GitletTreeHandler.buildTree(CWD);
+        Tree emptyTree = new Tree();
 
         // handle commit
         Instant epoch0 = Instant.EPOCH;
         LocalDateTime initialCommitTime = LocalDateTime.ofInstant(epoch0, ZoneOffset.UTC);
         String msg = "initial commit";
         Commit initCommit = new Commit(initialCommitTime, msg, null, null, emptyTree);
-        pstCommit(initCommit);
+        persistObject(initCommit);
 
         // set the current branch to master
         Utils.writeContents(HEAD_FILE, "ref: refs/heads/master");
@@ -123,16 +121,26 @@ public class Repository {
      */
     public void commit(String msg){
 
-        Tree tree = GitletTreeHandler.buildTree(CWD);
+        // check if it is inside a repository
+        Path repoRoot = isInitialized();
 
-        LocalDateTime time = LocalDateTime.now();
-        List<String> parentCommits = Arrays.asList(getParentCommitID());
         Index index = Utils.readObject(INDEX_FILE, Index.class);
         HashMap<String, String> stagedFiles = index.getStagedFiles();
-        Commit commit = new Commit(time, msg, parentCommits, stagedFiles, tree);
+        if (stagedFiles == null || stagedFiles.isEmpty()){
+            System.out.println(NO_COMMIT_MESSAGE);
+        }
 
-        pstCommit(commit);
-        pstTree(tree);
+        String parentCommitId = getParentCommitID();
+        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
+        Tree parentTree = parentCommit.getTree();
+
+        Tree tree = buildTree(stagedFiles, parentTree);
+
+        LocalDateTime time = LocalDateTime.now();
+        Commit commit = new Commit(time, msg, parentCommitId, stagedFiles, tree);
+
+        persistObject(commit);
+        persistObject(tree);
         clearStagedFiles(index);
         updateCurrentBranch(commit.getSha1());
     }
@@ -171,7 +179,7 @@ public class Repository {
                 // file in the stagde area
                 String stagedsha1 = index.getSha1(filePath);
                 if (! sha1.equals(stagedsha1)){
-                    pstBolb(blob);
+                    persistObject(blob);
                     index.addFile(filePath, sha1);
                 }
             }else{
@@ -180,11 +188,11 @@ public class Repository {
                 if (lastCommitFiles.containsKey(filePath)){
                     String lastCommitsha1 = lastCommitFiles.get(filePath);
                     if (! sha1.equals(lastCommitsha1)){
-                        pstBolb(blob);
+                        persistObject(blob);
                         index.addFile(filePath, sha1);
                     }
                 }else{
-                    pstBolb(blob);
+                    persistObject(blob);
                     index.addFile(filePath, sha1);
                 }
             }
@@ -198,7 +206,7 @@ public class Repository {
     private static Path isInitialized(){
         Path repoRoot = findRepositoryRoot(CWD);
         if (repoRoot == null){
-            System.out.println("fatal: not a gitlet repository (or any of the parent directories): .gitlet");
+            System.out.println(NOT_IN_GITLET_DIR_MESSAGE);
             System.exit(0);
         }
         return repoRoot;
@@ -281,46 +289,11 @@ public class Repository {
         return fileList;
     }
 
-    /**
-     * persistence Tree
-     */
-    private void pstTree(Tree tree){
-        String sha1 = tree.getSha1();
+    private <T extends Persistable> void persistObject(T object) {
+        String sha1 = object.getSha1();
         File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));
         objectFile.mkdir();
-        Utils.writeObject(new File(objectFile, sha1.substring(2)), tree);
-        List<GitletObject> children = tree.getChildren();
-        if (! children.isEmpty()){
-            for (GitletObject child : children){
-                if (child instanceof Blob){
-                    Blob blob = (Blob) child;
-                    pstBolb(blob);
-                }else{
-                    Tree subtree = (Tree) child;
-                    pstTree(subtree);
-                }
-            }
-        }
-    }
-
-    /**
-     * persistence Blob
-     */
-    private void pstBolb(Blob blob){
-        String sha1 = blob.getSha1();
-        File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));
-        objectFile.mkdir();
-        Utils.writeObject(new File(objectFile, sha1.substring(2)), blob);
-    }
-
-    /**
-     * persistence Tree
-     */
-    private void pstCommit(Commit commit){
-        String sha1 = commit.getSha1();
-        File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));
-        objectFile.mkdir();
-        Utils.writeObject(new File(objectFile, sha1.substring(2)), commit);
+        Utils.writeObject(new File(objectFile, sha1.substring(2)), object);
     }
 
     /**
@@ -342,6 +315,12 @@ public class Repository {
     }
 
 
-
+    private Tree buildTree(HashMap<String, String> stagedFiles, Tree parentTree){
+        Tree tree = new Tree(parentTree);
+        for(Map.Entry<String, String> entry : stagedFiles.entrySet()){
+            tree.addFile(entry.getKey(), entry.getValue());
+        }
+        return tree;
+    }
 
 }
