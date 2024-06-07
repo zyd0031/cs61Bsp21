@@ -10,7 +10,6 @@ import java.util.List;
 import static gitlet.Utils.toCommitDate;
 
 /** Represents a gitlet commit object.
- *  TODO: It's a good idea to give a description here of what else this Class
  *  does at a high level.
  *
  *  @author Yudie Zheng
@@ -27,7 +26,7 @@ public class Commit implements Persistable {
     /** The message of this Commit. */
     private String message;
     private LocalDateTime commitTime;
-    private String sha1HashCode;
+    private final String sha1HashCode;
     private String parentCommit;
     private HashMap<String, String> stagedfiles;
     private Tree tree;
@@ -41,6 +40,16 @@ public class Commit implements Persistable {
         this.sha1HashCode = sha1();
         this.tree = tree;
     }
+
+    public Commit(Commit original) {
+        this.message = original.message;
+        this.commitTime = original.commitTime;
+        this.sha1HashCode = original.sha1HashCode;
+        this.parentCommit = original.parentCommit;
+        this.stagedfiles = new HashMap<>(original.stagedfiles);
+        this.tree = original.tree;
+    }
+
 
 
     public String toString(){

@@ -42,6 +42,8 @@ public class Main {
                 }else{
                     repo.commit(args[1]);
                 }
+            case "rm":
+                repo.rm(Arrays.stream(args).skip(1).toArray(String[]::new));
 
         }
     }

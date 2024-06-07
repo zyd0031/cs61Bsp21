@@ -16,7 +16,7 @@ public class Tree implements Persistable {
     private HashMap<String, String> files;
 
     public Tree(Tree tree) {
-        this.files = new HashMap<>(tree.getFiles());
+        this.files = new HashMap<>(tree.files);
     }
 
     public Tree(HashMap<String, String> files) {
@@ -41,6 +41,10 @@ public class Tree implements Persistable {
 
     public HashMap<String, String> getFiles(){
         return files;
+    }
+
+    public boolean containsFile(String path){
+        return files.containsKey(path);
     }
 
     public List<String> getFilesList(){

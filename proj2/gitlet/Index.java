@@ -36,5 +36,9 @@ public class Index implements Serializable {
         stagedFiles.clear();
     }
 
+    public void removeFile(String file){
+        stagedFiles.remove(file);
+    }
+
 
 }

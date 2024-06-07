@@ -13,8 +13,7 @@ import java.time.Instant;
 
 import static gitlet.Utils.*;
 import static gitlet.constant.FailureCaseConstant.ALREADY_INITIALIZED;
-import static gitlet.constant.MessageConstant.NOT_IN_GITLET_DIR_MESSAGE;
-import static gitlet.constant.MessageConstant.NO_COMMIT_MESSAGE;
+import static gitlet.constant.MessageConstant.*;
 
 // TODO: any imports you need here
 
@@ -90,15 +89,8 @@ public class Repository {
      * gitlet add a.txt b.txt
      */
     public void add(String[] filePaths){
-        // check if it is inside a repository
-        Path repoRoot = isInitialized();
-
-        // chech whether the files indeed exist
-        isFilesExists(filePaths);
-
-        // check whether the files are within the current repository
-        isFilesInsideCurrentRepo(filePaths, repoRoot);
-
+        // do some basic check and return the repopath
+        Path repoRoot = basicCheck(filePaths);
         // then, do the add command
         add(repoRoot, filePaths);
     }
@@ -127,7 +119,7 @@ public class Repository {
         Index index = Utils.readObject(INDEX_FILE, Index.class);
         HashMap<String, String> stagedFiles = index.getStagedFiles();
         if (stagedFiles == null || stagedFiles.isEmpty()){
-            System.out.println(NO_COMMIT_MESSAGE);
+            System.out.println(NO_STAGEDFILES_MESSAGE);
         }
 
         String parentCommitId = getParentCommitID();
@@ -140,9 +132,67 @@ public class Repository {
         Commit commit = new Commit(time, msg, parentCommitId, stagedFiles, tree);
 
         persistObject(commit);
-        persistObject(tree);
+        // persistObject(tree);
         clearStagedFiles(index);
         updateCurrentBranch(commit.getSha1());
+    }
+
+    /**
+     * gitlet rm
+     */
+    public void rm(String[] filePaths){
+        // check if it is inside a repository
+        Path repoRoot = isInitialized();
+
+        // chech whether the files indeed exist
+        isFilesExists(filePaths);
+
+        // check whether the files are within the current repository
+        isFilesInsideCurrentRepo(filePaths, repoRoot);
+
+        // the main part of rm
+        // 1. read the index file
+        Path indexPath = repoRoot.resolve(".getlet/index");
+        Index index;
+        if (! Files.exists(indexPath)){
+            index = null;
+        }else{
+            index = Utils.readObject(indexPath.toFile(), Index.class);
+        }
+
+        // 2. read the current commit
+        String parentCommitId = getParentCommitID();
+        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
+        Commit commit = new Commit(parentCommit);
+        Tree tree = commit.getTree();
+
+        // 3. the main part of rm
+        for (String filePath : filePaths) {
+            boolean staged = false;
+            boolean committed = false;
+            if (index != null){
+                if (index.containsFile(filePath)){
+                    staged = true;
+                    index.removeFile(filePath);
+                }
+            }
+            if (tree.containsFile(filePath)){
+                committed = true;
+                tree.removeFile(filePath);
+            }
+
+            File file = new File(filePath);
+            if (file.exists()){
+                file.delete();
+            }
+
+            if (!staged && !committed){
+                System.out.println(NEITHER_STAGER_NOR_TRACKED + filePath);
+            }
+        }
+        Utils.writeObject(INDEX_FILE, index);
+        persistObject(commit);
+        
     }
 
     /**
@@ -160,8 +210,7 @@ public class Repository {
                 throw new RuntimeException(e);
             }
         }else{
-            HashMap<String, String> stagedFiles = Utils.readObject(indexPath.toFile(), HashMap.class);
-            index = new Index(stagedFiles);
+            index = Utils.readObject(indexPath.toFile(), Index.class);
         }
 
         /**
@@ -321,6 +370,37 @@ public class Repository {
             tree.addFile(entry.getKey(), entry.getValue());
         }
         return tree;
+    }
+
+    private Tree getParentCommitTree(String parentCommitId){
+        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
+        Tree parentTree = parentCommit.getTree();
+        return parentTree;
+    }
+
+    private Tree getParentCommitTree(){
+        String parentCommitId = getParentCommitID();
+        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
+        Tree parentTree = parentCommit.getTree();
+        return parentTree;
+    }
+
+    /**
+     * do some basic check and return the rootPath
+     * @param filePaths
+     * @return
+     */
+    private Path basicCheck(String[] filePaths){
+        // check if it is inside a repository
+        Path repoRoot = isInitialized();
+
+        // chech whether the files indeed exist
+        isFilesExists(filePaths);
+
+        // check whether the files are within the current repository
+        isFilesInsideCurrentRepo(filePaths, repoRoot);
+
+        return repoRoot;
     }
 
 }
