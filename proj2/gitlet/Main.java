@@ -6,7 +6,7 @@ import static gitlet.constant.MessageConstant.NO_COMMAND_ENTERED_MESSAGE;
 import static gitlet.constant.MessageConstant.NO_COMMIT_MESSAGE;
 
 /** Driver class for Gitlet, a subset of the Git version-control system.
- *  @author TODO
+ *  @author Yudie Zheng
  */
 public class Main {
 
@@ -44,6 +44,12 @@ public class Main {
                 }
             case "rm":
                 repo.rm(Arrays.stream(args).skip(1).toArray(String[]::new));
+            case "log":
+                if (args.length == 1) {
+                    repo.log();
+                } else {
+                    System.out.println("please enter the right command: gitlet log");
+                }
 
         }
     }

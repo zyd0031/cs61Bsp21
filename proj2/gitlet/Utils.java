@@ -252,19 +252,12 @@ class Utils {
     /**
      * convert LocalDateTime to commit Date
      */
-    static String toCommitDate(LocalDateTime now){
-        ZoneOffset offset = ZoneId.systemDefault().getRules().getOffset(now);
-        ZonedDateTime zonedDateTime = now.atZone(ZoneId.systemDefault());
+    static String toCommitDate(LocalDateTime commitTime) {
+        // Convert LocalDateTime to ZonedDateTime using the system's default timezone
+        ZonedDateTime zdt = commitTime.atZone(ZoneId.systemDefault());
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss yyyy");
-        String formattedDateTime = now.format(formatter);
-
-        String offsetString = String.format("%s%02d%02d",
-                offset.getTotalSeconds() >= 0 ? "+" : "-",
-                Math.abs(offset.getTotalSeconds() / 3600),
-                Math.abs(offset.getTotalSeconds() % 3600) / 60);
-
-        String commitTime = formattedDateTime + " " + offsetString;
-        return commitTime;
+        // Format the ZonedDateTime to a string
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy, HH:mm:ss z");
+        return formatter.format(zdt);
     }
 }

@@ -12,15 +12,11 @@ import java.time.Instant;
 
 
 import static gitlet.Utils.*;
-import static gitlet.constant.FailureCaseConstant.ALREADY_INITIALIZED;
 import static gitlet.constant.MessageConstant.*;
 
-// TODO: any imports you need here
 
 /** Represents a gitlet repository.
- *  TODO: It's a good idea to give a description here of what else this Class
  *  does at a high level.
- *
  *  @author Yudie Zheng
  */
 public class Repository {
@@ -36,11 +32,6 @@ public class Repository {
     // store the head of each branch
     public static final File BRANCH_HEAD_DIR = join(CWD, "refs", "heads");
     public static final File[] DIRS = {GITLET_DIR, HEAD_FILE, OBJECT_DIR, BRANCH_HEAD_DIR};
-
-    /** content of the 。/getlet/index file -----> HashMap<FilePath, sha1Hash>*/
-    // private HashMap<String, String> stagedFiles;
-    /** last commit info */
-    private HashMap<String, String> lastCommitFiles;
 
 
     /**
@@ -141,14 +132,8 @@ public class Repository {
      * gitlet rm
      */
     public void rm(String[] filePaths){
-        // check if it is inside a repository
-        Path repoRoot = isInitialized();
-
-        // chech whether the files indeed exist
-        isFilesExists(filePaths);
-
-        // check whether the files are within the current repository
-        isFilesInsideCurrentRepo(filePaths, repoRoot);
+        // do some basic check and return the repopath
+        Path repoRoot = basicCheck(filePaths);
 
         // the main part of rm
         // 1. read the index file
@@ -192,6 +177,27 @@ public class Repository {
         }
         Utils.writeObject(INDEX_FILE, index);
         persistObject(commit);
+
+    }
+
+    /**
+     * TODO consider merge
+     * gitlet log (mimic "git log --first-parent")
+     */
+    public void log(){
+        // check whether it is initialized
+        isInitialized();
+
+        String parentCommitId = getParentCommitID();
+        Commit parentCommit = getCommitbyId(parentCommitId);
+        System.out.println(parentCommit);
+
+        String commitId = parentCommit.getParentCommitID();
+        while(commitId != null){
+            Commit commit = getCommitbyId(commitId);
+            System.out.println(commit);
+            commitId = commit.getParentCommitID();
+        }
         
     }
 
@@ -214,7 +220,12 @@ public class Repository {
         }
 
         /**
-         * 2. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
+         * 2. get last commit staged files
+         */
+        HashMap<String, String> lastCommitFilesContents = getLastCommitFilesContents();
+
+        /**
+         * 3. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
          * must meet the conditions
          * a. not exists in the staging area
          * b. exists in the staging area, but the content changed
@@ -223,7 +234,7 @@ public class Repository {
         for (String filePath : filePaths){
             Blob blob = new Blob(filePath);
             String sha1 = blob.getSha1();
-            HashMap<String, String> lastCommitFilesContents = getLastCommitFilesContents();
+
             if (index.containsFile(filePath)){
                 // file in the stagde area
                 String stagedsha1 = index.getSha1(filePath);
@@ -234,8 +245,8 @@ public class Repository {
             }else{
                 // file not in the staged area
                 // check if it is same as last commit
-                if (lastCommitFiles.containsKey(filePath)){
-                    String lastCommitsha1 = lastCommitFiles.get(filePath);
+                if (lastCommitFilesContents.containsKey(filePath)){
+                    String lastCommitsha1 = lastCommitFilesContents.get(filePath);
                     if (! sha1.equals(lastCommitsha1)){
                         persistObject(blob);
                         index.addFile(filePath, sha1);
@@ -316,6 +327,16 @@ public class Repository {
     }
 
     /**
+     * get parent comit
+     */
+    private Commit getCommitbyId(String CommitId){
+        File parentCommitFile = join(OBJECT_DIR, CommitId.substring(0, 2), CommitId.substring(2));
+        Commit Commit = Utils.readObject(parentCommitFile, Commit.class);
+        return Commit;
+    }
+
+
+    /**
      * list all files under this repo(exclude .getlet)
      * @param file
      * @return List<filepath relative to CWD>
@@ -338,6 +359,9 @@ public class Repository {
         return fileList;
     }
 
+    /**
+     * persistent object
+     */
     private <T extends Persistable> void persistObject(T object) {
         String sha1 = object.getSha1();
         File objectFile = join(OBJECT_DIR, sha1.substring(0, 2));

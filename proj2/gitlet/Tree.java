@@ -7,8 +7,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import static gitlet.constant.FileModeConstant.DIRECTORY;
-import static gitlet.constant.FileModeConstant.NORMAL_FILE;
 
 public class Tree implements Persistable {
     private static final long SerialVersionUID = 2L;

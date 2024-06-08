@@ -54,11 +54,11 @@ public class Commit implements Persistable {
 
     public String toString(){
         String commitTime_ = toCommitDate(commitTime);
-        return "commit " + sha1HashCode +
-                "\n Data: " + commitTime_ +
-                "\n      " + message;
+        return "===\n" +
+                "commit " + sha1HashCode + "\n" +
+                "Data: " + commitTime_ + "\n" +
+                message + ".\n";
     }
-
 
     private String sha1(){
         StringBuilder content = new StringBuilder();
@@ -86,6 +86,10 @@ public class Commit implements Persistable {
 
     public HashMap<String, String> getstagedFiles(){
         return stagedfiles;
+    }
+
+    public String getParentCommitID(){
+        return parentCommit;
     }
 
 }
