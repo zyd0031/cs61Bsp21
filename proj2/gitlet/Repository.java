@@ -30,8 +30,9 @@ public class Repository {
     public static final File INDEX_FILE = join(GITLET_DIR, "index");
     public static final File OBJECT_DIR = join(GITLET_DIR, "objects");
     // store the head of each branch
-    public static final File BRANCH_HEAD_DIR = join(CWD, "refs", "heads");
-    public static final File[] DIRS = {GITLET_DIR, HEAD_FILE, OBJECT_DIR, BRANCH_HEAD_DIR};
+    public static final File BRANCH_HEAD_DIR = join(GITLET_DIR, "refs", "heads");
+    public static final File LOGS_HEAD = join(GITLET_DIR, "logs", "HEAD");
+    public static final File[] DIRS = {GITLET_DIR, HEAD_FILE, OBJECT_DIR, BRANCH_HEAD_DIR, LOGS_HEAD};
 
 
     /**
@@ -126,6 +127,12 @@ public class Repository {
         // persistObject(tree);
         clearStagedFiles(index);
         updateCurrentBranch(commit.getSha1());
+
+        // write commit metadata to logs/HEAD
+        String unixTimestamp = toUnixTimestamp(time);
+        String commitData = commit.getSha1() + " " + unixTimestamp + msg + "\n";
+        Utils.appendContents(LOGS_HEAD, commitData);
+
     }
 
     /**
@@ -197,6 +204,23 @@ public class Repository {
             Commit commit = getCommitbyId(commitId);
             System.out.println(commit);
             commitId = commit.getParentCommitID();
+        }
+
+    }
+
+    public void global_log() {
+        // check whether it is initialized
+        isInitialized();
+
+        String contents = readContentsAsString(LOGS_HEAD);
+        String[] commits = contents.split("\n");
+        for (String commit : commits) {
+            String[] s = commit.split(" ", 3);
+            String commitId = s[0];
+            String commitUnixTime = s[1];
+            String commitTime = toCommitDate(commitUnixTime);
+            String commitMessage = s[2];
+            System.out.println(formatCommit(commitId, commitTime, commitMessage));
         }
         
     }

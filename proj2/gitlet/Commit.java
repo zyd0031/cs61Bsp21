@@ -92,4 +92,8 @@ public class Commit implements Persistable {
         return parentCommit;
     }
 
+    public LocalDateTime getCommitTime(){
+        return commitTime;
+    }
+
 }

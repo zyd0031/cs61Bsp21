@@ -12,12 +12,10 @@ import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Formatter;
@@ -148,6 +146,33 @@ class Utils {
         writeContents(file, content);
     }
 
+    static void appendContents(File file, Object... contents) {
+        // Check if the target is a directory
+        if (file.isDirectory()) {
+            throw new IllegalArgumentException("cannot overwrite directory");
+        }
+
+        // Using try-with-resources to ensure that resources are closed properly
+        try (BufferedOutputStream str = new BufferedOutputStream(
+                Files.newOutputStream(file.toPath(), StandardOpenOption.CREATE, StandardOpenOption.APPEND))) {
+            for (Object obj : contents) {
+                // Write each object to the stream
+                if (obj instanceof byte[]) {
+                    str.write((byte[]) obj);
+                } else {
+                    str.write(((String) obj).getBytes(StandardCharsets.UTF_8));
+                }
+            }
+        } catch (IOException | ClassCastException excp) {
+            throw new IllegalArgumentException(excp.getMessage());
+        }
+    }
+
+    static void appendContents(String filePath, String content){
+        File file = new File(filePath);
+        appendContents(file, content);
+    }
+
     /** Return an object of type T read from FILE, casting it to EXPECTEDCLASS.
      *  Throws IllegalArgumentException in case of problems. */
     static <T extends Serializable> T readObject(File file,
@@ -260,4 +285,49 @@ class Utils {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy, HH:mm:ss z");
         return formatter.format(zdt);
     }
+
+    /**
+     * convert LocalDateTime to UnixTimestamp
+     * @param timestamp
+     * @return
+     */
+    static String toUnixTimestamp(LocalDateTime timestamp) {
+        long epochSecond = timestamp.toEpochSecond(ZoneOffset.UTC);
+        return String.valueOf(epochSecond);
+    }
+
+    /**
+     * convert unixTimestamp to commit Date
+     * @param unixTimestampStr
+     * @return
+     */
+    static String toCommitDate(String unixTimestampStr) {
+        long unixTimestamp = Long.parseLong(unixTimestampStr);
+        // Convert the Unix timestamp to a ZonedDateTime
+        ZonedDateTime zdt = Instant.ofEpochSecond(unixTimestamp).atZone(ZoneId.systemDefault());
+
+        // Define the format of the date and time
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy, HH:mm:ss z");
+
+        // Format the ZonedDateTime to a string and return it
+        return formatter.format(zdt);
+    }
+
+    /**
+     * the log output format
+     * @param commitId
+     * @param time
+     * @param commitMessage
+     */
+    public static String formatCommit(String commitId, String time,String commitMessage) {
+        return String.format(
+                "===\n" +
+                "commit %s\n" +
+                "Date: %s\n" +
+                "%s\n",
+                commitId, time, commitMessage
+        );
+    }
+
+
 }

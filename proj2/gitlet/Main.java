@@ -50,6 +50,12 @@ public class Main {
                 } else {
                     System.out.println("please enter the right command: gitlet log");
                 }
+            case "global-log":
+                if (args.length == 1) {
+                    repo.global_log();
+                } else {
+                    System.out.println("please enter the right command: gitlet global-log");
+                }
 
         }
     }
