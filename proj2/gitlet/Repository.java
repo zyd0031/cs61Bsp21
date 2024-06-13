@@ -32,7 +32,8 @@ public class Repository {
     // store the head of each branch
     public static final File BRANCH_HEAD_DIR = join(GITLET_DIR, "refs", "heads");
     public static final File LOGS_HEAD = join(GITLET_DIR, "logs", "HEAD");
-    public static final File[] DIRS = {GITLET_DIR, HEAD_FILE, OBJECT_DIR, BRANCH_HEAD_DIR, LOGS_HEAD};
+    public static final File[] DIRS = {GITLET_DIR, OBJECT_DIR, BRANCH_HEAD_DIR};
+    public static final File[] FILES = {HEAD_FILE, INDEX_FILE, LOGS_HEAD};
 
 
     /**
@@ -45,11 +46,23 @@ public class Repository {
             System.exit(0);
         }
         // else initialize a repository
+        // create the dirs
         for (File dir : DIRS) {
             if (dir.exists()){
                 dir.delete();
             }
             dir.mkdir();
+        }
+        // crete the files
+        for (File file : FILES) {
+            try {
+                if (file.exists()){
+                    file.delete();
+                }
+                file.createNewFile();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
         //make the first commit
         makeFirstCommit();
@@ -82,9 +95,9 @@ public class Repository {
      */
     public void add(String[] filePaths){
         // do some basic check and return the repopath
-        Path repoRoot = basicCheck(filePaths);
+        basicCheck(filePaths);
         // then, do the add command
-        add(repoRoot, filePaths);
+        add_(filePaths);
     }
 
     /**
@@ -92,11 +105,11 @@ public class Repository {
      */
     public void addAll(){
         // before add, check if the repo is initialized
-        Path repoRoot = isInitialized();
+        isInitialized();
         // list all files under this repo
         List<String> files = listAllFiles(CWD);
         String[] filesArray = files.toArray(new String[0]);
-        add(repoRoot, filesArray);
+        add_(filesArray);
     }
 
     /**
@@ -106,7 +119,7 @@ public class Repository {
     public void commit(String msg){
 
         // check if it is inside a repository
-        Path repoRoot = isInitialized();
+        isInitialized();
 
         Index index = Utils.readObject(INDEX_FILE, Index.class);
         HashMap<String, String> stagedFiles = index.getStagedFiles();
@@ -140,13 +153,16 @@ public class Repository {
      */
     public void rm(String[] filePaths){
         // do some basic check and return the repopath
-        Path repoRoot = basicCheck(filePaths);
+        basicCheck(filePaths);
 
         // the main part of rm
         // 1. read the index file
-        Path indexPath = repoRoot.resolve(".getlet/index");
+        Path indexPath = CWD.toPath().resolve(".getlet/index");
         Index index;
         if (! Files.exists(indexPath)){
+            // create an index file
+
+
             index = null;
         }else{
             index = Utils.readObject(indexPath.toFile(), Index.class);
@@ -234,24 +250,88 @@ public class Repository {
         isInitialized();
         String contents = readContentsAsString(LOGS_HEAD);
         String[] commits = contents.split("\n");
+        boolean found = false;
         for (String commit : commits) {
             String[] s = commit.split(" ", 3);
             String commitId = s[0];
-            String commitUnixTime = s[1];
             String commitMessage = s[2];
             if (commitMessage.equals(message)){
                 System.out.println(commitId);
+                found = true;
             }
         }
-        
+        if (!found){
+            System.out.println(NO_COMMIT_WITH_THAT_MESSAGE);
+        }
+    }
+
+    /**
+     * Displays what branches currently exist, and marks the current branch with a *.
+     * Also displays what files have been staged for addition or removal.
+      === Branches ===
+      *master
+      other-branch
+
+      === Staged Files ===
+      wug.txt
+      wug2.txt
+
+      === Removed Files ===
+      goodbye.txt
+
+      === Modifications Not Staged For Commit ===
+      junk.txt (deleted)
+      wug3.txt (modified)
+
+      === Untracked Files ===
+      random.stuff
+     */
+    public void status(){
+        isInitialized();
+
+        // Branches
+        System.out.println("=== Branches ===");
+        List<String> branches = plainFilenamesIn(BRANCH_HEAD_DIR);
+        String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
+        for (String branch : branches) {
+            if (branch.equals(head)){
+                System.out.println("*" + branch);
+            }else{
+                System.out.println(branch);
+            }
+        }
+        System.out.println();
+
+
+        // Staged Files
+        System.out.println("=== Staged Files ===");
+        Path indexPath = INDEX_FILE.toPath();
+        Index index;
+        if (! Files.exists(indexPath)){
+            index = null;
+            System.out.println();
+        }else{
+            index = Utils.readObject(indexPath.toFile(), Index.class);
+        }
+
+
+
+
+        // Removed Files
+
+        // Modifications Not Staged For Commit
+
+        // Untracked Files
+
+
     }
 
     /**
      * the main part of add
      */
-    private void add(Path repoRoot, String[] filePaths){
+    private void add_(String[] filePaths){
         /** 1. read the index file if it exists else create one */
-        Path indexPath = repoRoot.resolve(".getlet/index");
+        Path indexPath = INDEX_FILE.toPath();
         Index index;
         if (! Files.exists(indexPath)){
             try {
@@ -308,26 +388,13 @@ public class Repository {
     /**
      * check whether thi repo is initialized
      */
-    private static Path isInitialized(){
-        Path repoRoot = findRepositoryRoot(CWD);
-        if (repoRoot == null){
+    private void isInitialized(){
+        if (!GITLET_DIR.exists()){
             System.out.println(NOT_IN_GITLET_DIR_MESSAGE);
             System.exit(0);
         }
-        return repoRoot;
     }
 
-    /** get the repo root path */
-    public static Path findRepositoryRoot(File file){
-        Path current = file.toPath().toAbsolutePath();
-        while (current != null){
-            if (Files.exists(current.resolve(".getlet"))){
-                return current;
-            }
-            current = current.getParent();
-        }
-        return null;
-    }
 
     /** chech whether the files indeed exist */
     private static void isFilesExists(String[] filePaths){
@@ -340,7 +407,8 @@ public class Repository {
         }
     }
 
-    private static void isFilesInsideCurrentRepo(String[] filePaths, Path repoRootPath){
+    private static void isFilesInsideCurrentRepo(String[] filePaths){
+        Path repoRootPath = CWD.toPath();
         for (String filePath : filePaths) {
             Path path = Paths.get(filePath).toAbsolutePath();
             if (!repoRootPath.startsWith(path)){
@@ -459,17 +527,16 @@ public class Repository {
      * @param filePaths
      * @return
      */
-    private Path basicCheck(String[] filePaths){
+    private void basicCheck(String[] filePaths){
         // check if it is inside a repository
-        Path repoRoot = isInitialized();
+        isInitialized();
 
         // chech whether the files indeed exist
         isFilesExists(filePaths);
 
         // check whether the files are within the current repository
-        isFilesInsideCurrentRepo(filePaths, repoRoot);
+        isFilesInsideCurrentRepo(filePaths);
 
-        return repoRoot;
     }
 
 }

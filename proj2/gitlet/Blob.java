@@ -8,7 +8,6 @@ import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static gitlet.Repository.findRepositoryRoot;
 
 public class Blob implements Persistable {
 
