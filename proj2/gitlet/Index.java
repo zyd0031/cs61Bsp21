@@ -68,13 +68,6 @@ public class Index implements Serializable {
         stagedFilesForRemoval.add(file);
     }
 
-//    // if the file is currently staged, unstage it
-//    public void unstageFile(String file){
-//        if (stagedFiles.containsKey(file)){
-//            stagedFiles.remove(file);
-//        }
-//    }
-
     public void removeFile(String file){
         stagedFiles.remove(file);
     }

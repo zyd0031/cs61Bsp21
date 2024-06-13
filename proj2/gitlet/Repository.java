@@ -72,14 +72,11 @@ public class Repository {
      * make the first commit
      */
     private void makeFirstCommit(){
-        // build Tree and persistence it
-        Tree emptyTree = new Tree();
 
-        // handle commit
         Instant epoch0 = Instant.EPOCH;
         LocalDateTime initialCommitTime = LocalDateTime.ofInstant(epoch0, ZoneOffset.UTC);
         String msg = "initial commit";
-        Commit initCommit = new Commit(initialCommitTime, msg, null, null, emptyTree);
+        Commit initCommit = new Commit(initialCommitTime, msg, null, null, new Tree());
         persistObject(initCommit);
 
         // set the current branch to master
@@ -344,9 +341,10 @@ public class Repository {
         }
 
         /**
-         * 2. get last commit staged files
+         * 2. get last commit
          */
-        HashMap<String, String> lastCommitFilesContents = getLastCommitFilesContents();
+        String parentCommitID = getParentCommitID();
+        Commit parentcommit = getCommitbyId(parentCommitID);
 
         /**
          * 3. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
@@ -369,8 +367,8 @@ public class Repository {
             }else{
                 // file not in the staged area
                 // check if it is same as last commit
-                if (lastCommitFilesContents.containsKey(filePath)){
-                    String lastCommitsha1 = lastCommitFilesContents.get(filePath);
+                if (parentcommit.stagedFilesContainsFile(filePath)){
+                    String lastCommitsha1 = parentcommit.getSha1ofStagedFile(filePath);
                     if (! sha1.equals(lastCommitsha1)){
                         persistObject(blob);
                         index.addFile(filePath, sha1);

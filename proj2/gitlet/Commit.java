@@ -86,8 +86,22 @@ public class Commit implements Persistable {
         return commitTime;
     }
 
+
+    /**
+     * check whether the tree contains file
+     * @param file
+     * @return
+     */
     public boolean treeContainsFile(String file){
         return tree.containsFile(file);
+    }
+
+    public boolean stagedFilesContainsFile(String file){
+        return stagedfiles.containsKey(file);
+    }
+
+    public String getSha1ofStagedFile(String file){
+        return stagedfiles.get(file);
     }
 
 }
