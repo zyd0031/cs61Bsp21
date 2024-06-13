@@ -5,7 +5,7 @@ import java.io.File;
 import static capers.Utils.*;
 
 /** Canine Capers: A Gitlet Prelude.
- * @author TODO
+ * @author Yudie Zheng
 */
 public class Main {
     /**

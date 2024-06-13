@@ -5,7 +5,7 @@ import java.io.Serializable;
 import static capers.Utils.*;
 
 /** Represents a dog that can be serialized.
- * @author TODO
+ * @author Yudie Zheng
 */
 public class Dog { // TODO
 
