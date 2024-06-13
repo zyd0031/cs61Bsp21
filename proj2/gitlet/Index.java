@@ -8,12 +8,10 @@ import java.util.Set;
 
 public class Index implements Serializable {
     private static final long serialVersionUID = 2341433L;
-    private HashMap<String, String> stagedFiles;
-    private Set<String> stagedFilesForRemoval;// Map<FilePath, BlobSha1Hash>
+    private HashMap<String, String> stagedFiles = new HashMap<>(); // Map<FilePath, BlobSha1Hash>
+    private Set<String> stagedFilesForRemoval = new HashSet<>();
 
     public Index() {
-        this.stagedFiles = new HashMap<>();
-        this.stagedFilesForRemoval = new HashSet<>();
     }
 
 
@@ -70,6 +68,10 @@ public class Index implements Serializable {
 
     public void removeFile(String file){
         stagedFiles.remove(file);
+    }
+
+    public Set<String> getStagedFilesForRemoval(){
+        return stagedFilesForRemoval;
     }
 
 }

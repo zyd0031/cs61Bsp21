@@ -76,7 +76,7 @@ public class Repository {
         Instant epoch0 = Instant.EPOCH;
         LocalDateTime initialCommitTime = LocalDateTime.ofInstant(epoch0, ZoneOffset.UTC);
         String msg = "initial commit";
-        Commit initCommit = new Commit(initialCommitTime, msg, null, null, new Tree());
+        Commit initCommit = new Commit(initialCommitTime, msg, null, new HashMap<>(), new Tree());
         persistObject(initCommit);
 
         // set the current branch to master
@@ -120,7 +120,7 @@ public class Repository {
 
         Index index = Utils.readObject(INDEX_FILE, Index.class);
         HashMap<String, String> stagedFiles = index.getStagedFiles();
-        if (stagedFiles == null || stagedFiles.isEmpty()){
+        if (stagedFiles.isEmpty()){
             System.out.println(NO_STAGEDFILES_MESSAGE);
         }
 
@@ -128,13 +128,13 @@ public class Repository {
         Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
         Tree parentTree = parentCommit.getTree();
 
-        Tree tree = buildTree(stagedFiles, parentTree);
+        Tree tree = buildTree(index, parentTree);
 
         LocalDateTime time = LocalDateTime.now();
         Commit commit = new Commit(time, msg, parentCommitId, stagedFiles, tree);
 
         persistObject(commit);
-        // persistObject(tree);
+        persistObject(tree);
         clearStagedFiles(index);
         updateCurrentBranch(commit.getSha1());
 
@@ -498,8 +498,15 @@ public class Repository {
     }
 
 
-    private Tree buildTree(HashMap<String, String> stagedFiles, Tree parentTree){
+    private Tree buildTree(Index index, Tree parentTree){
         Tree tree = new Tree(parentTree);
+        Set<String> stagedFilesForRemoval = index.getStagedFilesForRemoval();
+        if (!stagedFilesForRemoval.isEmpty()){
+            for (String file : stagedFilesForRemoval) {
+                tree.removeFile(file);
+            }
+        }
+        HashMap<String, String> stagedFiles = index.getStagedFiles();
         for(Map.Entry<String, String> entry : stagedFiles.entrySet()){
             tree.addFile(entry.getKey(), entry.getValue());
         }
