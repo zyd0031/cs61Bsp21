@@ -226,6 +226,27 @@ public class Repository {
     }
 
     /**
+     * Prints out the ids of all commits that have the given commit message.
+     * @param message
+     */
+    public void find(String message){
+        // check whether it is initialized
+        isInitialized();
+        String contents = readContentsAsString(LOGS_HEAD);
+        String[] commits = contents.split("\n");
+        for (String commit : commits) {
+            String[] s = commit.split(" ", 3);
+            String commitId = s[0];
+            String commitUnixTime = s[1];
+            String commitMessage = s[2];
+            if (commitMessage.equals(message)){
+                System.out.println(commitId);
+            }
+        }
+        
+    }
+
+    /**
      * the main part of add
      */
     private void add(Path repoRoot, String[] filePaths){

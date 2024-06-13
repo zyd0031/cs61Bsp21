@@ -13,4 +13,5 @@ public class MessageConstant {
     public static final String NO_COMMIT_MESSAGE = "Please enter a commit message";
     public static final String ALREADY_INITIALIZED = "A Gitlet version-control system already exists in the current directory.";
     public static final String NEITHER_STAGER_NOR_TRACKED = "No reason to remove the file.";
+    public static final String NO_COMMIT_WITH_THAT_MESSAGE = "Found no commit with that message";
 }

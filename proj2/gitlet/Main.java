@@ -25,7 +25,7 @@ public class Main {
                     repo.init();
                 }
                 else{
-                    System.out.println("please enter the right command: gitlet init");
+                    System.out.println("please enter the right command: init");
                 }
                 break;
             case "add":
@@ -48,14 +48,21 @@ public class Main {
                 if (args.length == 1) {
                     repo.log();
                 } else {
-                    System.out.println("please enter the right command: gitlet log");
+                    System.out.println("please enter the right command: log");
                 }
             case "global-log":
                 if (args.length == 1) {
                     repo.global_log();
                 } else {
-                    System.out.println("please enter the right command: gitlet global-log");
+                    System.out.println("please enter the right command: global-log");
                 }
+            case "find":
+                if (args.length == 2) {
+                    repo.find(args[1]);
+                } else {
+                    System.out.println("please enter the right command: find [commit message]");
+                }
+
 
         }
     }
