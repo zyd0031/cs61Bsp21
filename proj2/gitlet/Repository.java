@@ -161,9 +161,12 @@ public class Repository {
         Index index;
         if (! Files.exists(indexPath)){
             // create an index file
-
-
-            index = null;
+            try {
+                INDEX_FILE.createNewFile();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            index = new Index();
         }else{
             index = Utils.readObject(indexPath.toFile(), Index.class);
         }
@@ -171,22 +174,20 @@ public class Repository {
         // 2. read the current commit
         String parentCommitId = getParentCommitID();
         Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
-        Commit commit = new Commit(parentCommit);
-        Tree tree = commit.getTree();
 
         // 3. the main part of rm
         for (String filePath : filePaths) {
             boolean staged = false;
             boolean committed = false;
-            if (index != null){
-                if (index.containsFile(filePath)){
-                    staged = true;
-                    index.removeFile(filePath);
-                }
+
+            if (index.containsFile(filePath)){
+                staged = true;
+                index.removeFile(filePath);
             }
-            if (tree.containsFile(filePath)){
+
+            if (parentCommit.treeContainsFile(filePath)){
                 committed = true;
-                tree.removeFile(filePath);
+                index.addFileForRemoval(filePath);
             }
 
             File file = new File(filePath);
@@ -199,8 +200,6 @@ public class Repository {
             }
         }
         Utils.writeObject(INDEX_FILE, index);
-        persistObject(commit);
-
     }
 
     /**
@@ -483,10 +482,10 @@ public class Repository {
     }
 
     /**
-     * clear staged files from index
+     * clear index
      */
     private void clearStagedFiles(Index index){
-        index.clearStagedFiles();
+        index.clear();
         Utils.writeObject(INDEX_FILE, index);
     }
 

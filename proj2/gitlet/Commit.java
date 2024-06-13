@@ -41,16 +41,6 @@ public class Commit implements Persistable {
         this.tree = tree;
     }
 
-    public Commit(Commit original) {
-        this.message = original.message;
-        this.commitTime = original.commitTime;
-        this.sha1HashCode = original.sha1HashCode;
-        this.parentCommit = original.parentCommit;
-        this.stagedfiles = new HashMap<>(original.stagedfiles);
-        this.tree = original.tree;
-    }
-
-
 
     public String toString(){
         String commitTime_ = toCommitDate(commitTime);
@@ -94,6 +84,10 @@ public class Commit implements Persistable {
 
     public LocalDateTime getCommitTime(){
         return commitTime;
+    }
+
+    public boolean treeContainsFile(String file){
+        return tree.containsFile(file);
     }
 
 }
