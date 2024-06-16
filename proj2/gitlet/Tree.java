@@ -6,12 +6,13 @@ import java.sql.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public class Tree implements Persistable {
     private static final long SerialVersionUID = 2L;
     // <filePath, Sha1Hash>
-    private HashMap<String, String> files;
+    private Map<String, String> files;
 
     public Tree(Tree tree) {
         this.files = new HashMap<>(tree.files);
@@ -37,7 +38,7 @@ public class Tree implements Persistable {
         files.remove(path);
     }
 
-    public HashMap<String, String> getFiles(){
+    public Map<String, String> getFiles(){
         return files;
     }
 
@@ -47,6 +48,10 @@ public class Tree implements Persistable {
 
     public List<String> getFilesList(){
         return new ArrayList<>(files.keySet());
+    }
+
+    public String getFileSha1(String path){
+        return files.get(path);
     }
 
     @Override

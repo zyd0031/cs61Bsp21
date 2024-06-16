@@ -329,5 +329,11 @@ class Utils {
         );
     }
 
+    public static String getSha1(File file) {
+        byte[] content = readContents(file);
+        String header = "bolb" + content.length + "\0";
+        return sha1(header, content);
+    }
+
 
 }

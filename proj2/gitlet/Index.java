@@ -1,15 +1,12 @@
 package gitlet;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class Index implements Serializable {
     private static final long serialVersionUID = 2341433L;
-    private HashMap<String, String> stagedFiles = new HashMap<>(); // Map<FilePath, BlobSha1Hash>
-    private Set<String> stagedFilesForRemoval = new HashSet<>();
+    private Map<String, String> stagedFiles = new HashMap<>(); // Map<FilePath, BlobSha1Hash>
+    private List<String> stagedFilesForRemoval = new ArrayList<>();
 
     public Index() {
     }
@@ -28,9 +25,17 @@ public class Index implements Serializable {
      * get the staged files
      * @return
      */
-    public HashMap<String, String> getStagedFiles(){
+    public Map<String, String> getStagedFilesMap(){
         return stagedFiles;
     }
+
+    public List<String> getStagedFiles(){
+        List<String> files = new ArrayList<>(stagedFiles.keySet());
+        Collections.sort(files);
+        return files;
+    }
+
+
 
     /**
      * if the staged files contain file
@@ -70,8 +75,10 @@ public class Index implements Serializable {
         stagedFiles.remove(file);
     }
 
-    public Set<String> getStagedFilesForRemoval(){
+    public List<String> getStagedFilesForRemoval(){
+        Collections.sort(stagedFilesForRemoval);
         return stagedFilesForRemoval;
     }
+
 
 }

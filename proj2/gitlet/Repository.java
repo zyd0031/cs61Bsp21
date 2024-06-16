@@ -118,8 +118,8 @@ public class Repository {
         // check if it is inside a repository
         isInitialized();
 
-        Index index = Utils.readObject(INDEX_FILE, Index.class);
-        HashMap<String, String> stagedFiles = index.getStagedFiles();
+        Index index = getIndex();
+        Map<String, String> stagedFiles = index.getStagedFilesMap();
         if (stagedFiles.isEmpty()){
             System.out.println(NO_STAGEDFILES_MESSAGE);
         }
@@ -154,19 +154,7 @@ public class Repository {
 
         // the main part of rm
         // 1. read the index file
-        Path indexPath = CWD.toPath().resolve(".getlet/index");
-        Index index;
-        if (! Files.exists(indexPath)){
-            // create an index file
-            try {
-                INDEX_FILE.createNewFile();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            index = new Index();
-        }else{
-            index = Utils.readObject(indexPath.toFile(), Index.class);
-        }
+        Index index = getIndex();
 
         // 2. read the current commit
         String parentCommitId = getParentCommitID();
@@ -288,6 +276,7 @@ public class Repository {
         // Branches
         System.out.println("=== Branches ===");
         List<String> branches = plainFilenamesIn(BRANCH_HEAD_DIR);
+        branches.sort(String::compareTo);
         String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
         for (String branch : branches) {
             if (branch.equals(head)){
@@ -299,27 +288,89 @@ public class Repository {
         System.out.println();
 
 
-        // Staged Files
+        // Staged Files and Removed Files
+        Index index = getIndex();
         System.out.println("=== Staged Files ===");
-        Path indexPath = INDEX_FILE.toPath();
-        Index index;
-        if (! Files.exists(indexPath)){
-            index = null;
-            System.out.println();
-        }else{
-            index = Utils.readObject(indexPath.toFile(), Index.class);
+        List<String> stagedFiles = index.getStagedFiles();
+        stagedFiles.sort(String::compareTo);
+        if (!stagedFiles.isEmpty()){
+            stagedFiles.forEach(file -> System.out.println(file));
         }
+        System.out.println();
+        System.out.println("=== Removed Files ===");
+        List<String> stagedFilesForRemoval = index.getStagedFilesForRemoval();
+        stagedFilesForRemoval.sort(String::compareTo);
+        if (!stagedFilesForRemoval.isEmpty()){
+            stagedFilesForRemoval.forEach(file -> System.out.println(file));
+        }
+        System.out.println();
 
 
-
-
-        // Removed Files
+        // ——————————————————————————————————————————————————————————
+        String parentCommitID = getParentCommitID();
+        Commit parentCommit = getCommitbyId(parentCommitID);
+        Map<String, String> treefiles = parentCommit.getTreeFiles();
+        Map<String, String> filetoSha1 = listFiletoSha1(CWD);
+        Map<String, String> stagedFilesMap = index.getStagedFilesMap();
 
         // Modifications Not Staged For Commit
+        System.out.println("=== Modifications Not Staged For Commit ===");
+        List<String> modifiedNotStaged = new ArrayList<>();
+        List<String> deletedNotStaged = new ArrayList<>();
+        // Tracked in the current commit, changed in the working directory, but not staged;
+        // Not staged for removal, but tracked in the current commit and deleted from the working directory.
+        for(Map.Entry<String, String> entry : treefiles.entrySet()){
+            String file = entry.getKey();
+            String sha1 = entry.getValue();
+            if (!filetoSha1.getOrDefault(file, "").equals(sha1) && !index.containsFile(file)){
+                modifiedNotStaged.add(file);
+            }
+            File file1 = new File(file);
+            if (!stagedFilesForRemoval.contains(file) && !file1.exists()){
+                deletedNotStaged.add(file);
+            }
+        }
+
+        for(Map.Entry<String, String> entry : stagedFilesMap.entrySet()){
+            String file = entry.getKey();
+            String sha1 = entry.getValue();
+            String workSha1 = filetoSha1.get(file);
+            if (workSha1 == null){
+                // Staged for addition, but deleted in the working directory
+                modifiedNotStaged.add(file);
+            } else if (!workSha1.equals(sha1)){
+                // Staged for addition, but with different contents than in the working directory;
+                modifiedNotStaged.add(file);
+            }
+        }
+        modifiedNotStaged.sort(String::compareTo);
+        deletedNotStaged.sort(String::compareTo);
+        deletedNotStaged.forEach(file -> System.out.println(file + ("deleted")));
+        modifiedNotStaged.forEach(file -> System.out.println(file + ("modified")));
+        System.out.println();
 
         // Untracked Files
+        System.out.println("=== Untracked Files ===");
+        List<String> untrackedFiles = new ArrayList<>();
+        // files present in the working directory but neither staged for addition nor tracked.
+        // This includes files that have been staged for removal, but then re-created without Gitlet’s knowledge.
+        for(Map.Entry<String, String> entry : filetoSha1.entrySet()){
+            String file = entry.getKey();
+            if (!index.containsFile(file) && !parentCommit.getTreeFiles().containsKey(file)){
+                untrackedFiles.add(file);
+            }
+        }
 
-
+        for (String file : stagedFilesForRemoval) {
+            File file1 = new File(file);
+            if (file1.exists()){
+                untrackedFiles.add(file);
+            }
+        }
+        untrackedFiles.sort(String::compareTo);
+        untrackedFiles.forEach(file -> System.out.println(file);
+        System.out.println();
+        
     }
 
     /**
@@ -428,11 +479,11 @@ public class Repository {
     /**
      * Get the contents of the files in the last commit
      */
-    private HashMap<String, String> getLastCommitFilesContents(){
+    private Map<String, String> getLastCommitFilesContents(){
         String parentCommitId = getParentCommitID();
         File parentCommitFile = join(OBJECT_DIR, parentCommitId.substring(0, 2), parentCommitId.substring(2));
         Commit parentCommit = Utils.readObject(parentCommitFile, Commit.class);
-        HashMap<String, String> files = parentCommit.getstagedFiles();
+        Map<String, String> files = parentCommit.getstagedFiles();
         return files;
     }
 
@@ -453,7 +504,6 @@ public class Repository {
      */
     private List<String> listAllFiles(File file){
         List<String> fileList = new ArrayList<>();
-        Path basePath = CWD.toPath();
         if (file.isDirectory() && !file.getName().equals(".gitlet")){
             File[] files = file.listFiles();
             if (files != null){
@@ -462,11 +512,32 @@ public class Repository {
                 }
             }
         }else if (file.isFile()){
-            Path filePath = file.toPath();
-            String relativePath = basePath.relativize(filePath).toString();
-            fileList.add(relativePath);
+            fileList.add(file.toString());
         }
         return fileList;
+    }
+
+
+    /**
+     * get the Map<file, sha1> of all files in this repo
+     * @param file
+     * @return
+     */
+    private Map<String, String> listFiletoSha1(File file){
+        Map<String, String> filetoSha1 = new HashMap<>();
+        if (file.isDirectory() && !file.getName().equals(".gitlet")){
+            File[] files = file.listFiles();
+            if (files != null){
+                for (File subFile : files) {
+                    filetoSha1.putAll(listFiletoSha1(subFile));
+                }
+            }
+        }else if (file.isFile()){
+            String sha1 = Utils.getSha1(file);
+            String filePath = file.toString();
+            filetoSha1.put(filePath, sha1);
+        }
+        return filetoSha1;
     }
 
     /**
@@ -500,31 +571,20 @@ public class Repository {
 
     private Tree buildTree(Index index, Tree parentTree){
         Tree tree = new Tree(parentTree);
-        Set<String> stagedFilesForRemoval = index.getStagedFilesForRemoval();
+        List<String> stagedFilesForRemoval = index.getStagedFilesForRemoval();
         if (!stagedFilesForRemoval.isEmpty()){
             for (String file : stagedFilesForRemoval) {
                 tree.removeFile(file);
             }
         }
-        HashMap<String, String> stagedFiles = index.getStagedFiles();
+        Map<String, String> stagedFiles = index.getStagedFilesMap();
         for(Map.Entry<String, String> entry : stagedFiles.entrySet()){
             tree.addFile(entry.getKey(), entry.getValue());
         }
         return tree;
     }
 
-    private Tree getParentCommitTree(String parentCommitId){
-        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
-        Tree parentTree = parentCommit.getTree();
-        return parentTree;
-    }
 
-    private Tree getParentCommitTree(){
-        String parentCommitId = getParentCommitID();
-        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
-        Tree parentTree = parentCommit.getTree();
-        return parentTree;
-    }
 
     /**
      * do some basic check and return the rootPath
@@ -541,6 +601,22 @@ public class Repository {
         // check whether the files are within the current repository
         isFilesInsideCurrentRepo(filePaths);
 
+    }
+
+    private Index getIndex(){
+        Path indexPath = INDEX_FILE.toPath();
+        Index index;
+        if (! Files.exists(indexPath)){
+            try {
+                Files.createFile(indexPath);
+                index = new Index();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }else{
+            index = Utils.readObject(indexPath.toFile(), Index.class);
+        }
+        return index;
     }
 
 }

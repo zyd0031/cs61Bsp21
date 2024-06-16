@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static gitlet.Utils.toCommitDate;
 
@@ -28,11 +29,11 @@ public class Commit implements Persistable {
     private LocalDateTime commitTime;
     private final String sha1HashCode;
     private String parentCommit;
-    private HashMap<String, String> stagedfiles;
+    private Map<String, String> stagedfiles;
     private Tree tree;
 
 
-    public Commit(LocalDateTime time, String message, String parentCommit, HashMap<String, String> stagedfiles, Tree tree) {
+    public Commit(LocalDateTime time, String message, String parentCommit, Map<String, String> stagedfiles, Tree tree) {
         this.message = message;
         this.parentCommit = parentCommit;
         this.commitTime = time;
@@ -74,7 +75,7 @@ public class Commit implements Persistable {
         return tree;
     }
 
-    public HashMap<String, String> getstagedFiles(){
+    public Map<String, String> getstagedFiles(){
         return stagedfiles;
     }
 
@@ -96,12 +97,22 @@ public class Commit implements Persistable {
         return tree.containsFile(file);
     }
 
+    public String treeFileSha1(String file){
+        return tree.getFileSha1(file);
+    }
+
     public boolean stagedFilesContainsFile(String file){
         return stagedfiles.containsKey(file);
     }
 
     public String getSha1ofStagedFile(String file){
         return stagedfiles.get(file);
+    }
+    
+    public Map<String, String> getTreeFiles(){
+        Map<String, String> files = tree.getFiles();
+        return files;
+
     }
 
 }
