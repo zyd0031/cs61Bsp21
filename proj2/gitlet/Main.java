@@ -95,6 +95,13 @@ public class Main {
                     throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
+            case "branch":
+                if (args.length == 2) {
+                    repo.branch(args[1]);
+                }else{
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                }
+                break;
             default:
                 throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
 

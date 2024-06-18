@@ -511,10 +511,36 @@ public class Repository {
             Utils.writeContents(file1, fileContent);
         }
 
+        // update HEAD
+        Utils.writeContents(HEAD_FILE, "ref: refs/heads/" + branch);
+
         // clear the staging area
         Index index = getIndex();
         clearIndex(index);
+    }
 
+    /**
+     * Creates a new branch with the given name, and points it at the current head commit.
+     * A branch is nothing more than a name for a reference (a SHA-1 identifier) to a commit node.
+     * This command does NOT immediately switch to the newly created branch (just as in real Git).
+     * Before you ever call branch, your code should be running with a default branch called “master”.
+     * @param branch
+     */
+    private void branch(String branch){
+        isInitialized();
+
+        File file = join(BRANCH_HEAD_DIR, branch);
+        if (file.exists()){
+            throw new GitletException(BRANCH_ALREADT_EXISTS);
+        }else{
+            try {
+                file.createNewFile();
+                String parentCommitID = getParentCommitID();
+                Utils.writeContents(file, parentCommitID);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
 
@@ -806,6 +832,8 @@ public class Repository {
         }
         file.delete();
     }
+
+
 
 
 }

@@ -20,6 +20,7 @@ public class MessageConstant {
     public static final String NO_SUCH_BRANCH_EXISTS = "No such branch exists";
     public static final String NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH = "No need to checkout the current branch";
     public static final String UNCHECKED_FILE = "There is an unchecked file in the way; delete it, or add and commit it first";
+    public static final String BRANCH_ALREADT_EXISTS = "A branch with that name already exists";
 
 
 }
