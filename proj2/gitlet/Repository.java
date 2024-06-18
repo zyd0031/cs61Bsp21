@@ -279,7 +279,7 @@ public class Repository {
         System.out.println("=== Branches ===");
         List<String> branches = plainFilenamesIn(BRANCH_HEAD_DIR);
         branches.sort(String::compareTo);
-        String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
+        String head = getHead();
         for (String branch : branches) {
             if (branch.equals(head)){
                 System.out.println("*" + branch);
@@ -412,12 +412,12 @@ public class Repository {
                 if (candidateDir.size() == 0){
                     throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
                 }else if(candidateDir.size() > 1){
-                    throw new GitletException(ENTER_MORE_DIGITS);
+                    throw new GitletException(ENTER_MORE_DIGITS_MESSAGE);
                 }else if (candidateDir.size() == 1){
                     String first2Id = candidateDir.get(0);
                     File[] files1 = join(OBJECT_DIR, first2Id).listFiles();
                     if (files1.length  > 1){
-                        throw new GitletException(ENTER_MORE_DIGITS);
+                        throw new GitletException(ENTER_MORE_DIGITS_MESSAGE);
                     }
                     File f = files1[0];
                     commit = Utils.readObject(f, Commit.class);
@@ -479,11 +479,11 @@ public class Repository {
         // get checkout branch head commit
         File file = join(BRANCH_HEAD_DIR, branch);
         if (!file.exists()){
-            throw new GitletException(NO_SUCH_BRANCH_EXISTS);
+            throw new GitletException(NO_SUCH_BRANCH_EXISTS_MESSAGE);
         }
-        String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
+        String head = getHead();
         if (head.equals(branch)){
-            throw new GitletException(NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH);
+            throw new GitletException(NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH_MESSAGE);
         }
         String checkoutCommitID = readContentsAsString(file);
         Commit checkoutCommit = getCommitbyId(checkoutCommitID);
@@ -496,7 +496,7 @@ public class Repository {
         List<String> uncheckedFiles = getUncheckedFiles(currentCommit);
         for (String uncheckedFile : uncheckedFiles) {
             if (checkoutCommit.treeContainsFile(uncheckedFile)){
-                System.out.println(UNCHECKED_FILE);
+                System.out.println(UNCHECKED_FILE_MESSAGE);
                 System.exit(0);
             }
         }
@@ -526,12 +526,12 @@ public class Repository {
      * Before you ever call branch, your code should be running with a default branch called “master”.
      * @param branch
      */
-    private void branch(String branch){
+    public void branch(String branch){
         isInitialized();
 
         File file = join(BRANCH_HEAD_DIR, branch);
         if (file.exists()){
-            throw new GitletException(BRANCH_ALREADT_EXISTS);
+            throw new GitletException(BRANCH_ALREADT_EXISTS_MESSAGE);
         }else{
             try {
                 file.createNewFile();
@@ -540,6 +540,24 @@ public class Repository {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    /**
+     * Deletes the branch with the given name.
+     * This only means to delete the pointer associated with the branch;
+     * @param branch
+     */
+    public void rmBranch(String branch){
+        String head = getHead();
+        if (head.equals(branch)){
+            throw new GitletException(CONNOT_REMOVE_THE_CURRENT_BRANCH_MESSAGE);
+        }
+        File file = join(BRANCH_HEAD_DIR, branch);
+        if (!file.exists()){
+            throw new GitletException(BRANCH_DOES_NOT_EXIST_MESSAGE);
+        }else{
+            file.delete();
         }
     }
 
@@ -831,6 +849,15 @@ public class Repository {
             }
         }
         file.delete();
+    }
+
+    /**
+     * get the name of the head branch
+     * @return
+     */
+    private String getHead(){
+        String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
+        return head;
     }
 
 

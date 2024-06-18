@@ -16,11 +16,13 @@ public class MessageConstant {
     public static final String NO_COMMIT_WITH_THAT_MESSAGE = "Found no commit with that message";
     public static final String FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE = "File does not exist in that commit";
     public static final String NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE = "No commit with that id exists";
-    public static final String ENTER_MORE_DIGITS = "Please enter more digits";
-    public static final String NO_SUCH_BRANCH_EXISTS = "No such branch exists";
-    public static final String NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH = "No need to checkout the current branch";
-    public static final String UNCHECKED_FILE = "There is an unchecked file in the way; delete it, or add and commit it first";
-    public static final String BRANCH_ALREADT_EXISTS = "A branch with that name already exists";
+    public static final String ENTER_MORE_DIGITS_MESSAGE = "Please enter more digits";
+    public static final String NO_SUCH_BRANCH_EXISTS_MESSAGE = "No such branch exists";
+    public static final String NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH_MESSAGE = "No need to checkout the current branch";
+    public static final String UNCHECKED_FILE_MESSAGE = "There is an unchecked file in the way; delete it, or add and commit it first";
+    public static final String BRANCH_ALREADT_EXISTS_MESSAGE = "A branch with that name already exists";
+    public static final String CONNOT_REMOVE_THE_CURRENT_BRANCH_MESSAGE = "Cannot remove the current branch";
+    public static final String BRANCH_DOES_NOT_EXIST_MESSAGE = "A branch with that name does not exist";
 
 
 }

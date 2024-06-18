@@ -102,8 +102,15 @@ public class Main {
                     throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
+            case "rm-branch":
+                if (args.length == 2) {
+                    repo.rmBranch(args[1]);
+                }else{
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                }
+                break;
             default:
-                throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                throw new GitletException(INVALID_COMMAND_MESSAGE);
 
 
         }
