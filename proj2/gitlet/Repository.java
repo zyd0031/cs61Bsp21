@@ -1,5 +1,7 @@
 package gitlet;
 
+import gitlet.exception.GitletException;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -121,7 +123,7 @@ public class Repository {
         Index index = getIndex();
         Map<String, String> stagedFiles = index.getStagedFilesMap();
         if (stagedFiles.isEmpty()){
-            System.out.println(NO_STAGEDFILES_MESSAGE);
+            throw new GitletException(NO_STAGEDFILES_MESSAGE);
         }
 
         String parentCommitId = getParentCommitID();
@@ -135,7 +137,7 @@ public class Repository {
 
         persistObject(commit);
         persistObject(tree);
-        clearStagedFiles(index);
+        clearIndex(index);
         updateCurrentBranch(commit.getSha1());
 
         // write commit metadata to logs/HEAD
@@ -351,27 +353,171 @@ public class Repository {
 
         // Untracked Files
         System.out.println("=== Untracked Files ===");
-        List<String> untrackedFiles = new ArrayList<>();
-        // files present in the working directory but neither staged for addition nor tracked.
-        // This includes files that have been staged for removal, but then re-created without Gitlet’s knowledge.
-        for(Map.Entry<String, String> entry : filetoSha1.entrySet()){
-            String file = entry.getKey();
-            if (!index.containsFile(file) && !parentCommit.getTreeFiles().containsKey(file)){
-                untrackedFiles.add(file);
+        List<String> untrackedFiles = getUncheckedFiles(parentCommit);
+        untrackedFiles.sort(String::compareTo);
+        untrackedFiles.forEach(file -> System.out.println(file));
+        System.out.println();
+
+    }
+
+    /**
+     * Takes the version of the file as it exists in the head commit and puts it in the working directory,
+     * overwriting the version of the file that’s already there if there is one.
+     * The new version of the file is not staged.
+     * @param file
+     */
+    public void checkFile(String file){
+        isInitialized();
+
+        String parentCommitID = getParentCommitID();
+        Commit headCommit = getCommitbyId(parentCommitID);
+        if (headCommit.treeContainsFile(file)){
+            String sha1 = headCommit.treeFileSha1(file);
+            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
+            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            Utils.writeContents(file, fileContent);
+        }else{
+            throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
+        }
+    }
+
+    /**
+     * Takes the version of the file as it exists in the commit with the given id,
+     * and puts it in the working directory,
+     * overwriting the version of the file that’s already there if there is one.
+     * The new version of the file is not staged.
+     * @param commitId
+     * @param file
+     */
+    public void checkoutCommitFile(String commitId, String file){
+        isInitialized();
+
+        File file1 = join(OBJECT_DIR, commitId.substring(0, 2), commitId.substring(2));
+        if (!file1.exists()){
+            throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+        }
+        Commit commit = null;
+        if (commitId.length() == 40){
+            commit = getCommitbyId(commitId);
+        }else{
+            File[] files = OBJECT_DIR.listFiles();
+            if (commitId.length() <= 2){
+                List<String> candidateDir = new ArrayList<>();
+                for (File f : files) {
+                    String fileName = f.getName();
+                    if (fileName.startsWith(commitId)){
+                        candidateDir.add(fileName);
+                    }
+                }
+                if (candidateDir.size() == 0){
+                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                }else if(candidateDir.size() > 1){
+                    throw new GitletException(ENTER_MORE_DIGITS);
+                }else if (candidateDir.size() == 1){
+                    String first2Id = candidateDir.get(0);
+                    File[] files1 = join(OBJECT_DIR, first2Id).listFiles();
+                    if (files1.length  > 1){
+                        throw new GitletException(ENTER_MORE_DIGITS);
+                    }
+                    File f = files1[0];
+                    commit = Utils.readObject(f, Commit.class);
+                }
+            }else{
+                // commitId.length > 2
+                String firs2Id = commitId.substring(0, 2);
+                boolean found = false;
+                for (File f : files) {
+                    String fileName = f.getName();
+                    if (fileName.equals(firs2Id)){
+                        found = true;
+                        break;
+                    }
+                }
+                if (found == false){
+                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                }else{
+                    found = false;
+                    File[] files1 = join(OBJECT_DIR, firs2Id).listFiles();
+                    String last = commitId.substring(2);
+                    for (File file2 : files1) {
+                        String name = file2.getName();
+                        if (name.equals(firs2Id)){
+                            commit = Utils.readObject(file2, Commit.class);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found == false){
+                        throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                    }
+                }
             }
         }
 
-        for (String file : stagedFilesForRemoval) {
-            File file1 = new File(file);
-            if (file1.exists()){
-                untrackedFiles.add(file);
+        if (!commit.treeContainsFile(file)){
+            throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
+        }else{
+            String sha1 = commit.treeFileSha1(file);
+            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
+            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            Utils.writeContents(file, fileContent);
+        }
+    }
+
+    /**
+     * Takes all files in the commit at the head of the given branch,
+     * and puts them in the working directory,
+     * overwriting the versions of the files that are already there if they exist.
+     * Any files that are tracked in the current branch but are not present in the checked-out branch are deleted.
+     * Also, at the end of this command, the given branch will now be considered the current branch (HEAD).
+     * The staging area is cleared, unless the checked-out branch is the current branch
+     * @param branch
+     */
+    public void checkoutBranch(String branch){
+        isInitialized();
+
+        // get checkout branch head commit
+        File file = join(BRANCH_HEAD_DIR, branch);
+        if (!file.exists()){
+            throw new GitletException(NO_SUCH_BRANCH_EXISTS);
+        }
+        String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
+        if (head.equals(branch)){
+            throw new GitletException(NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH);
+        }
+        String checkoutCommitID = readContentsAsString(file);
+        Commit checkoutCommit = getCommitbyId(checkoutCommitID);
+        // get current commit
+        String currentCommitID = getParentCommitID();
+        Commit currentCommit = getCommitbyId(currentCommitID);
+
+        // If a working file is untracked in the current branch and would be overwritten by the checkout,
+        // print "There is an untracked file in the way; delete it, or add and commit it first." and exit;
+        List<String> uncheckedFiles = getUncheckedFiles(currentCommit);
+        for (String uncheckedFile : uncheckedFiles) {
+            if (checkoutCommit.treeContainsFile(uncheckedFile)){
+                System.out.println(UNCHECKED_FILE);
+                System.exit(0);
             }
         }
-        untrackedFiles.sort(String::compareTo);
-        untrackedFiles.forEach(file -> System.out.println(file);
-        System.out.println();
-        
+
+        // delete all files and add the checkout branch files
+        deleteAllFiles(CWD);
+        for(Map.Entry<String, String> entry : checkoutCommit.getTreeFiles().entrySet()){
+            String file1 = entry.getKey();
+            String sha1 = entry.getValue();
+            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
+            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            Utils.writeContents(file1, fileContent);
+        }
+
+        // clear the staging area
+        Index index = getIndex();
+        clearIndex(index);
+
     }
+
+
 
     /**
      * the main part of add
@@ -498,6 +644,7 @@ public class Repository {
 
 
     /**
+     * TODO might be wrong
      * list all files under this repo(exclude .getlet)
      * @param file
      * @return List<filepath relative to CWD>
@@ -519,6 +666,7 @@ public class Repository {
 
 
     /**
+     * TODO might be wrong
      * get the Map<file, sha1> of all files in this repo
      * @param file
      * @return
@@ -553,7 +701,7 @@ public class Repository {
     /**
      * clear index
      */
-    private void clearStagedFiles(Index index){
+    private void clearIndex(Index index){
         index.clear();
         Utils.writeObject(INDEX_FILE, index);
     }
@@ -618,5 +766,46 @@ public class Repository {
         }
         return index;
     }
+
+    private List<String> getUncheckedFiles(Commit currentCommit){
+        Map<String, String> filetoSha1 = listFiletoSha1(CWD);
+        Index index = getIndex();
+        List<String> stagedFilesForRemoval = index.getStagedFilesForRemoval();
+        List<String> untrackedFiles = new ArrayList<>();
+        // files present in the working directory but neither staged for addition nor tracked.
+        // This includes files that have been staged for removal, but then re-created without Gitlet’s knowledge.
+        for(Map.Entry<String, String> entry : filetoSha1.entrySet()){
+            String file = entry.getKey();
+            if (!index.containsFile(file) && !currentCommit.getTreeFiles().containsKey(file)){
+                untrackedFiles.add(file);
+            }
+        }
+
+        for (String file : stagedFilesForRemoval) {
+            File file1 = new File(file);
+            if (file1.exists()){
+                untrackedFiles.add(file);
+            }
+        }
+        return untrackedFiles;
+    }
+
+    /**
+     * TODO might be wrong
+     * delete all files under this repo
+     * @param file
+     */
+    private void deleteAllFiles(File file){
+        if (file.isDirectory() && !file.getName().equals(".gitlet")){
+            File[] files = file.listFiles();
+            if (files != null){
+                for (File subFile : files) {
+                    deleteAllFiles(subFile);
+                }
+            }
+        }
+        file.delete();
+    }
+
 
 }

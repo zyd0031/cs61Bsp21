@@ -1,5 +1,7 @@
 package gitlet;
 
+import gitlet.exception.GitletException;
+
 import java.util.Arrays;
 
 import static gitlet.constant.MessageConstant.*;
@@ -14,7 +16,7 @@ public class Main {
      */
     public static void main(String[] args) {
         if (args.length == 0) {
-            System.out.println(NO_COMMAND_ENTERED_MESSAGE);
+            throw new GitletException(NO_COMMAND_ENTERED_MESSAGE);
         }
         String firstArg = args[0];
         Repository repo = new Repository();
@@ -24,7 +26,7 @@ public class Main {
                     repo.init();
                 }
                 else{
-                    System.out.println(INCORRECT_OPERANDS_MESSAGE);
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
             case "add":
@@ -36,12 +38,11 @@ public class Main {
                 break;
             case "commit":
                 if (args.length == 1) {
-                    System.out.println(NO_COMMIT_MESSAGE);
-                    System.exit(0);
+                    throw new GitletException(NO_COMMIT_MESSAGE);
                 }else if (args.length == 2) {
                     repo.commit(args[1]);
                 }else{
-                    System.out.println(INCORRECT_OPERANDS_MESSAGE);
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
             case "rm":
@@ -51,32 +52,51 @@ public class Main {
                 if (args.length == 1) {
                     repo.log();
                 } else {
-                    System.out.println(INCORRECT_OPERANDS_MESSAGE);
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
             case "global-log":
                 if (args.length == 1) {
                     repo.global_log();
                 } else {
-                    System.out.println(INCORRECT_OPERANDS_MESSAGE);
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
             case "find":
                 if (args.length == 2) {
                     repo.find(args[1]);
                 } else {
-                    System.out.println(INCORRECT_OPERANDS_MESSAGE);
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
             case "status":
                 if (args.length == 1) {
                     repo.status();
                 }else{
-                    System.out.println(INCORRECT_OPERANDS_MESSAGE);
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                }
+                break;
+            case "checkout":
+                if (args.length == 3) {
+                    if (args[1].equals("--")) {
+                        repo.checkFile(args[2]);
+                    }else{
+                        throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                    }
+                }else if (args.length == 4) {
+                    if (args[2].equals("--")) {
+                        repo.checkoutCommitFile(args[1], args[3]);
+                    }else{
+                        throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                    }
+                }else if (args.length == 2) {
+                    repo.checkoutBranch(args[1]);
+                }else{
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
             default:
-                System.out.println(INVALID_COMMAND_MESSAGE);
+                throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
 
 
         }

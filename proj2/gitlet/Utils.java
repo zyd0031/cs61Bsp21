@@ -1,14 +1,6 @@
 package gitlet;
 
-import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.charset.StandardCharsets;
@@ -17,9 +9,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Formatter;
 import java.util.List;
+import java.util.zip.InflaterInputStream;
+
 import gitlet.exception.GitletException;
 
 
@@ -142,6 +137,11 @@ class Utils {
     }
 
     static void writeContents(String filePath, String content){
+        File file = new File(filePath);
+        writeContents(file, content);
+    }
+
+    static void writeContents(String filePath, byte[] content){
         File file = new File(filePath);
         writeContents(file, content);
     }
@@ -333,6 +333,44 @@ class Utils {
         byte[] content = readContents(file);
         String header = "bolb" + content.length + "\0";
         return sha1(header, content);
+    }
+
+
+    public static byte[] getFileContentFromBlobObject(byte[] blob) {
+        byte[] decompress = decompress(blob);
+        int headerEndIndex = findContentBeginIndex(decompress);
+        byte[] content = new byte[decompress.length - headerEndIndex + 1];
+        System.arraycopy(decompress, headerEndIndex, content, 0, content.length);
+        return content;
+    }
+
+    /**
+     * decompress the object to get the contents
+     * @param compressed
+     * @return
+     */
+    private static byte[] decompress(byte[] compressed){
+        try (InflaterInputStream in = new InflaterInputStream(new ByteArrayInputStream(compressed))) {
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * get the index of the beginning of the content
+     * blob <size> \0XXXXXXXXX
+     *               +
+     * @param data
+     * @return
+     */
+    private static int findContentBeginIndex(byte[] data){
+        for (int i = 0; i < data.length; i++) {
+            if (data[i] == '\0') {
+                return i + 1;
+            }
+        }
+        throw new IllegalArgumentException("Invaliid Git Object Data");
     }
 
 
