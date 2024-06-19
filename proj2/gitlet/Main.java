@@ -109,6 +109,12 @@ public class Main {
                     throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
                 break;
+            case "reset":
+                if (args.length == 2) {
+                    repo.reset(args[1]);
+                }else{
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                }
             default:
                 throw new GitletException(INVALID_COMMAND_MESSAGE);
 

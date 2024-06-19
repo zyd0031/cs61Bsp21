@@ -103,11 +103,10 @@ public class Repository {
      * gitlet add *
      */
     public void addAll(){
-        // before add, check if the repo is initialized
-        isInitialized();
         // list all files under this repo
         List<String> files = listAllFiles(CWD);
         String[] filesArray = files.toArray(new String[0]);
+        basicCheck(filesArray);
         add_(filesArray);
     }
 
@@ -254,23 +253,6 @@ public class Repository {
     /**
      * Displays what branches currently exist, and marks the current branch with a *.
      * Also displays what files have been staged for addition or removal.
-      === Branches ===
-      *master
-      other-branch
-
-      === Staged Files ===
-      wug.txt
-      wug2.txt
-
-      === Removed Files ===
-      goodbye.txt
-
-      === Modifications Not Staged For Commit ===
-      junk.txt (deleted)
-      wug3.txt (modified)
-
-      === Untracked Files ===
-      random.stuff
      */
     public void status(){
         isInitialized();
@@ -396,63 +378,7 @@ public class Repository {
         if (!file1.exists()){
             throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
         }
-        Commit commit = null;
-        if (commitId.length() == 40){
-            commit = getCommitbyId(commitId);
-        }else{
-            File[] files = OBJECT_DIR.listFiles();
-            if (commitId.length() <= 2){
-                List<String> candidateDir = new ArrayList<>();
-                for (File f : files) {
-                    String fileName = f.getName();
-                    if (fileName.startsWith(commitId)){
-                        candidateDir.add(fileName);
-                    }
-                }
-                if (candidateDir.size() == 0){
-                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
-                }else if(candidateDir.size() > 1){
-                    throw new GitletException(ENTER_MORE_DIGITS_MESSAGE);
-                }else if (candidateDir.size() == 1){
-                    String first2Id = candidateDir.get(0);
-                    File[] files1 = join(OBJECT_DIR, first2Id).listFiles();
-                    if (files1.length  > 1){
-                        throw new GitletException(ENTER_MORE_DIGITS_MESSAGE);
-                    }
-                    File f = files1[0];
-                    commit = Utils.readObject(f, Commit.class);
-                }
-            }else{
-                // commitId.length > 2
-                String firs2Id = commitId.substring(0, 2);
-                boolean found = false;
-                for (File f : files) {
-                    String fileName = f.getName();
-                    if (fileName.equals(firs2Id)){
-                        found = true;
-                        break;
-                    }
-                }
-                if (found == false){
-                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
-                }else{
-                    found = false;
-                    File[] files1 = join(OBJECT_DIR, firs2Id).listFiles();
-                    String last = commitId.substring(2);
-                    for (File file2 : files1) {
-                        String name = file2.getName();
-                        if (name.equals(firs2Id)){
-                            commit = Utils.readObject(file2, Commit.class);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found == false){
-                        throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
-                    }
-                }
-            }
-        }
+        Commit commit = getCommitbyAbbrID(commitId);
 
         if (!commit.treeContainsFile(file)){
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
@@ -493,23 +419,11 @@ public class Repository {
 
         // If a working file is untracked in the current branch and would be overwritten by the checkout,
         // print "There is an untracked file in the way; delete it, or add and commit it first." and exit;
-        List<String> uncheckedFiles = getUncheckedFiles(currentCommit);
-        for (String uncheckedFile : uncheckedFiles) {
-            if (checkoutCommit.treeContainsFile(uncheckedFile)){
-                System.out.println(UNCHECKED_FILE_MESSAGE);
-                System.exit(0);
-            }
-        }
+        checkFileConsistenceBetweenCommits(currentCommit, checkoutCommit);
 
         // delete all files and add the checkout branch files
         deleteAllFiles(CWD);
-        for(Map.Entry<String, String> entry : checkoutCommit.getTreeFiles().entrySet()){
-            String file1 = entry.getKey();
-            String sha1 = entry.getValue();
-            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
-            byte[] fileContent = getFileContentFromBlobObject(bytes);
-            Utils.writeContents(file1, fileContent);
-        }
+        addCheckoutCommitFiles(checkoutCommit);
 
         // update HEAD
         Utils.writeContents(HEAD_FILE, "ref: refs/heads/" + branch);
@@ -549,6 +463,8 @@ public class Repository {
      * @param branch
      */
     public void rmBranch(String branch){
+        isInitialized();
+
         String head = getHead();
         if (head.equals(branch)){
             throw new GitletException(CONNOT_REMOVE_THE_CURRENT_BRANCH_MESSAGE);
@@ -559,6 +475,41 @@ public class Repository {
         }else{
             file.delete();
         }
+    }
+
+    /**
+     * Checks out all the files tracked by the given commit.
+     * Removes tracked files that are not present in that commit.
+     * Also moves the current branch’s head to that commit node.
+     * See the intro for an example of what happens to the head pointer after using reset.
+     * The [commit id] may be abbreviated as for checkout.
+     * The staging area is cleared.
+     * The command is essentially checkout of an arbitrary commit that also changes the current branch head.
+     * @param commitID
+     */
+    public void reset(String commitID){
+        isInitialized();
+
+        Commit commit = getCommitbyAbbrID(commitID);
+        String currentCommitID = getParentCommitID();
+        Commit currentCommit = getCommitbyId(currentCommitID);
+
+        // If a working file is untracked in the current branch and would be overwritten by the checkout,
+        // print "There is an untracked file in the way; delete it, or add and commit it first." and exit;
+        checkFileConsistenceBetweenCommits(currentCommit, commit);
+
+        // delete all files and add the checkout branch files
+        deleteAllFiles(CWD);
+        addCheckoutCommitFiles(commit);
+
+        // update the HEAD
+        String sha1 = commit.treeFileSha1(currentCommitID);
+        updateCurrentBranch(sha1);
+
+        // clear the staging area
+        Index index = getIndex();
+        clearIndex(index);
+
     }
 
 
@@ -858,6 +809,97 @@ public class Repository {
     private String getHead(){
         String head = readContentsAsString(HEAD_FILE).replace("ref: refs/heads/", "");
         return head;
+    }
+
+    /**
+     * git Commit by the abbr of CommitID
+     * @param commitId
+     * @return
+     */
+    private Commit getCommitbyAbbrID(String commitId){
+        Commit commit = null;
+        if (commitId.length() == 40){
+            commit = getCommitbyId(commitId);
+        }else{
+            File[] files = OBJECT_DIR.listFiles();
+            if (commitId.length() <= 2){
+                List<String> candidateDir = new ArrayList<>();
+                for (File f : files) {
+                    String fileName = f.getName();
+                    if (fileName.startsWith(commitId)){
+                        candidateDir.add(fileName);
+                    }
+                }
+                if (candidateDir.size() == 0){
+                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                }else if (candidateDir.size() == 1){
+                    String first2Id = candidateDir.get(0);
+                    File[] files1 = join(OBJECT_DIR, first2Id).listFiles();
+                    if (files1.length  > 1){
+                        throw new GitletException(ENTER_MORE_DIGITS_MESSAGE);
+                    }else if (files1.length  == 0){
+                        throw new GitletException(SOME_FILES_ARE_DELETED_ACCIDENTLY_MESSAGE);
+                    }else{
+                        File f = files1[0];
+                        commit = Utils.readObject(f, Commit.class);
+                    }
+                }else{
+                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                }
+            } else{
+                // commitId.length > 2
+                String firs2Id = commitId.substring(0, 2);
+                boolean found = false;
+                for (File f : files) {
+                    String fileName = f.getName();
+                    if (fileName.equals(firs2Id)){
+                        found = true;
+                        break;
+                    }
+                }
+                if (found == false){
+                    throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                }else{
+                    List<File> candidateCommits = new ArrayList<>();
+                    File[] files1 = join(OBJECT_DIR, firs2Id).listFiles();
+                    String last = commitId.substring(2);
+                    for (File file2 : files1) {
+                        String name = file2.getName();
+                        if (name.startsWith(last)){
+                            candidateCommits.add(file2);
+                        }
+                    }
+                    if (candidateCommits.size() == 0){
+                        throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
+                    }else if (candidateCommits.size() == 1){
+                        commit = Utils.readObject(candidateCommits.get(0), Commit.class);
+                    }else{
+                        throw new GitletException(ENTER_MORE_DIGITS_MESSAGE);
+                    }
+                }
+            }
+        }
+        return commit;
+    }
+
+    private void checkFileConsistenceBetweenCommits(Commit currentCommit, Commit checkoutCommit){
+        List<String> uncheckedFiles = getUncheckedFiles(currentCommit);
+        for (String uncheckedFile : uncheckedFiles) {
+            if (checkoutCommit.treeContainsFile(uncheckedFile)){
+                System.out.println(UNCHECKED_FILE_MESSAGE);
+                System.exit(0);
+            }
+        }
+    }
+
+    private void addCheckoutCommitFiles(Commit checkoutCommit){
+        for(Map.Entry<String, String> entry : checkoutCommit.getTreeFiles().entrySet()){
+            String file1 = entry.getKey();
+            String sha1 = entry.getValue();
+            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
+            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            Utils.writeContents(file1, fileContent);
+        }
     }
 
 

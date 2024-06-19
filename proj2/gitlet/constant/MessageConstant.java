@@ -23,6 +23,7 @@ public class MessageConstant {
     public static final String BRANCH_ALREADT_EXISTS_MESSAGE = "A branch with that name already exists";
     public static final String CONNOT_REMOVE_THE_CURRENT_BRANCH_MESSAGE = "Cannot remove the current branch";
     public static final String BRANCH_DOES_NOT_EXIST_MESSAGE = "A branch with that name does not exist";
+    public static final String SOME_FILES_ARE_DELETED_ACCIDENTLY_MESSAGE = "Some files have been deleted";
 
 
 }
