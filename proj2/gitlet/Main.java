@@ -115,6 +115,14 @@ public class Main {
                 }else{
                     throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
                 }
+                break;
+            case "merge":
+                if (args.length == 2) {
+                    repo.merge(args[1]);
+                }else{
+                    throw new GitletException(INCORRECT_OPERANDS_MESSAGE);
+                }
+                break;
             default:
                 throw new GitletException(INVALID_COMMAND_MESSAGE);
 

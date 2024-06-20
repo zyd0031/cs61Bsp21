@@ -28,19 +28,30 @@ public class Commit implements Persistable {
     private String message;
     private LocalDateTime commitTime;
     private final String sha1HashCode;
-    private String parentCommit;
-    private Map<String, String> stagedfiles;
+    private List<String> parentCommits;
+    private Index index;
     private Tree tree;
 
 
-    public Commit(LocalDateTime time, String message, String parentCommit, Map<String, String> stagedfiles, Tree tree) {
+    /**
+     * regular commit
+     * @param time
+     * @param message
+     * @param parentCommits
+     * @param index
+     * @param tree
+     */
+    public Commit(LocalDateTime time, String message, List<String> parentCommits, Index index, Tree tree) {
         this.message = message;
-        this.parentCommit = parentCommit;
+        this.parentCommits = parentCommits;
         this.commitTime = time;
-        this.stagedfiles = stagedfiles;
+        this.index = index;
         this.sha1HashCode = sha1();
         this.tree = tree;
     }
+
+
+
 
 
     public String toString(){
@@ -54,8 +65,10 @@ public class Commit implements Persistable {
     private String sha1(){
         StringBuilder content = new StringBuilder();
         content.append("tree").append(tree.getSha1()).append("\n");
-        if (parentCommit != null) {
-            content.append("parent ").append(parentCommit).append("\n");
+        if (parentCommits != null && !parentCommits.isEmpty()){
+            for (String parentCommit : parentCommits) {
+                content.append("parent ").append(parentCommit).append("\n");
+            }
         }
         content.append(commitTime.toEpochSecond(java.time.ZoneOffset.UTC)).append(" +0000\n");
         content.append(message).append("\n");
@@ -76,11 +89,11 @@ public class Commit implements Persistable {
     }
 
     public Map<String, String> getstagedFiles(){
-        return stagedfiles;
+        return index.getStagedFilesForAddition();
     }
 
-    public String getParentCommitID(){
-        return parentCommit;
+    public List<String> getParentCommitID(){
+        return parentCommits;
     }
 
     public LocalDateTime getCommitTime(){
@@ -102,11 +115,11 @@ public class Commit implements Persistable {
     }
 
     public boolean stagedFilesContainsFile(String file){
-        return stagedfiles.containsKey(file);
+        return index.stagedFilesContainsFile(file);
     }
 
     public String getSha1ofStagedFile(String file){
-        return stagedfiles.get(file);
+        return index.getSha1(file);
     }
     
     public Map<String, String> getTreeFiles(){

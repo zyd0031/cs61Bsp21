@@ -136,6 +136,10 @@ class Utils {
         }
     }
 
+    static void writeContents(String file, Object... contents) {
+        writeContents(new File(file), contents);
+    }
+
     static void writeContents(String filePath, String content){
         File file = new File(filePath);
         writeContents(file, content);
@@ -334,6 +338,8 @@ class Utils {
         String header = "bolb" + content.length + "\0";
         return sha1(header, content);
     }
+
+
 
 
     public static byte[] getFileContentFromBlobObject(byte[] blob) {

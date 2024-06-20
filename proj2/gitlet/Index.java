@@ -5,7 +5,7 @@ import java.util.*;
 
 public class Index implements Serializable {
     private static final long serialVersionUID = 2341433L;
-    private Map<String, String> stagedFiles = new HashMap<>(); // Map<FilePath, BlobSha1Hash>
+    private Map<String, String> stagedFilesForAddition = new HashMap<>(); // Map<FilePath, BlobSha1Hash>
     private List<String> stagedFilesForRemoval = new ArrayList<>();
 
     public Index() {
@@ -17,33 +17,31 @@ public class Index implements Serializable {
      * @param file
      * @param sha1
      */
-    public void addFile(String file, String sha1){
-        stagedFiles.put(file, sha1);
+    public void addFileForAddition(String file, String sha1){
+        stagedFilesForAddition.put(file, sha1);
     }
 
     /**
      * get the staged files
      * @return
      */
-    public Map<String, String> getStagedFilesMap(){
-        return stagedFiles;
+    public Map<String, String> getStagedFilesForAddition(){
+        return stagedFilesForAddition;
     }
 
-    public List<String> getStagedFiles(){
-        List<String> files = new ArrayList<>(stagedFiles.keySet());
+    public List<String> getStagedFilesForAdditionList(){
+        List<String> files = new ArrayList<>(stagedFilesForAddition.keySet());
         Collections.sort(files);
         return files;
     }
-
-
 
     /**
      * if the staged files contain file
      * @param file
      * @return
      */
-    public boolean containsFile(String file){
-        return stagedFiles.containsKey(file);
+    public boolean stagedFilesContainsFile(String file){
+        return stagedFilesForAddition.containsKey(file);
     }
 
     /**
@@ -52,14 +50,14 @@ public class Index implements Serializable {
      * @return
      */
     public String getSha1(String file){
-        return stagedFiles.get(file);
+        return stagedFilesForAddition.get(file);
     }
 
     /**
      * clear inndex
      */
     public void clear(){
-        stagedFiles.clear();
+        stagedFilesForAddition.clear();
         stagedFilesForRemoval.clear();
     }
 
@@ -72,12 +70,22 @@ public class Index implements Serializable {
     }
 
     public void removeFile(String file){
-        stagedFiles.remove(file);
+        stagedFilesForAddition.remove(file);
     }
 
     public List<String> getStagedFilesForRemoval(){
         Collections.sort(stagedFilesForRemoval);
         return stagedFilesForRemoval;
+    }
+
+    public boolean isClean(){
+        if(!stagedFilesForAddition.isEmpty()){
+            return false;
+        }
+        if (!stagedFilesForRemoval.isEmpty()){
+            return false;
+        }
+        return true;
     }
 
 

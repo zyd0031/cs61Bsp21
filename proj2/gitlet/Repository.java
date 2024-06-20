@@ -78,7 +78,7 @@ public class Repository {
         Instant epoch0 = Instant.EPOCH;
         LocalDateTime initialCommitTime = LocalDateTime.ofInstant(epoch0, ZoneOffset.UTC);
         String msg = "initial commit";
-        Commit initCommit = new Commit(initialCommitTime, msg, null, new HashMap<>(), new Tree());
+        Commit initCommit = new Commit(initialCommitTime, msg, null, null, new Tree());
         persistObject(initCommit);
 
         // set the current branch to master
@@ -120,19 +120,19 @@ public class Repository {
         isInitialized();
 
         Index index = getIndex();
-        Map<String, String> stagedFiles = index.getStagedFilesMap();
-        if (stagedFiles.isEmpty()){
-            throw new GitletException(NO_STAGEDFILES_MESSAGE);
+        if (index.isClean()){
+            throw new GitletException(NO_INDEX_CHAGED_MESSAGE);
         }
 
-        String parentCommitId = getParentCommitID();
-        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
+        String parentCommitId = getHeadCommitID();
+        List<String> parentCommits = Arrays.asList(parentCommitId);
+        Commit parentCommit = getCommitbyId(parentCommitId);
         Tree parentTree = parentCommit.getTree();
 
         Tree tree = buildTree(index, parentTree);
 
         LocalDateTime time = LocalDateTime.now();
-        Commit commit = new Commit(time, msg, parentCommitId, stagedFiles, tree);
+        Commit commit = new Commit(time, msg, parentCommits, index, tree);
 
         persistObject(commit);
         persistObject(tree);
@@ -158,15 +158,14 @@ public class Repository {
         Index index = getIndex();
 
         // 2. read the current commit
-        String parentCommitId = getParentCommitID();
-        Commit parentCommit = Utils.readObject(new File(join(OBJECT_DIR, parentCommitId.substring(0, 2)), parentCommitId.substring(2)), Commit.class);
+        Commit parentCommit = getHeadCommit();
 
         // 3. the main part of rm
         for (String filePath : filePaths) {
             boolean staged = false;
             boolean committed = false;
 
-            if (index.containsFile(filePath)){
+            if (index.stagedFilesContainsFile(filePath)){
                 staged = true;
                 index.removeFile(filePath);
             }
@@ -189,22 +188,20 @@ public class Repository {
     }
 
     /**
-     * TODO consider merge
      * gitlet log (mimic "git log --first-parent")
      */
     public void log(){
         // check whether it is initialized
         isInitialized();
 
-        String parentCommitId = getParentCommitID();
-        Commit parentCommit = getCommitbyId(parentCommitId);
+        Commit parentCommit = getHeadCommit();
         System.out.println(parentCommit);
 
-        String commitId = parentCommit.getParentCommitID();
+        String commitId = parentCommit.getParentCommitID().get(0);
         while(commitId != null){
             Commit commit = getCommitbyId(commitId);
             System.out.println(commit);
-            commitId = commit.getParentCommitID();
+            commitId = commit.getParentCommitID().get(0);
         }
 
     }
@@ -275,7 +272,7 @@ public class Repository {
         // Staged Files and Removed Files
         Index index = getIndex();
         System.out.println("=== Staged Files ===");
-        List<String> stagedFiles = index.getStagedFiles();
+        List<String> stagedFiles = index.getStagedFilesForAdditionList();
         stagedFiles.sort(String::compareTo);
         if (!stagedFiles.isEmpty()){
             stagedFiles.forEach(file -> System.out.println(file));
@@ -291,11 +288,10 @@ public class Repository {
 
 
         // ——————————————————————————————————————————————————————————
-        String parentCommitID = getParentCommitID();
-        Commit parentCommit = getCommitbyId(parentCommitID);
+        Commit parentCommit = getHeadCommit();
         Map<String, String> treefiles = parentCommit.getTreeFiles();
         Map<String, String> filetoSha1 = listFiletoSha1(CWD);
-        Map<String, String> stagedFilesMap = index.getStagedFilesMap();
+        Map<String, String> stagedFilesMap = index.getStagedFilesForAddition();
 
         // Modifications Not Staged For Commit
         System.out.println("=== Modifications Not Staged For Commit ===");
@@ -306,7 +302,7 @@ public class Repository {
         for(Map.Entry<String, String> entry : treefiles.entrySet()){
             String file = entry.getKey();
             String sha1 = entry.getValue();
-            if (!filetoSha1.getOrDefault(file, "").equals(sha1) && !index.containsFile(file)){
+            if (!filetoSha1.getOrDefault(file, "").equals(sha1) && !index.stagedFilesContainsFile(file)){
                 modifiedNotStaged.add(file);
             }
             File file1 = new File(file);
@@ -351,12 +347,10 @@ public class Repository {
     public void checkFile(String file){
         isInitialized();
 
-        String parentCommitID = getParentCommitID();
-        Commit headCommit = getCommitbyId(parentCommitID);
+        Commit headCommit = getHeadCommit();
         if (headCommit.treeContainsFile(file)){
             String sha1 = headCommit.treeFileSha1(file);
-            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
-            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            byte[] fileContent = getFileContentsFromBlobSha1(sha1);
             Utils.writeContents(file, fileContent);
         }else{
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
@@ -384,8 +378,7 @@ public class Repository {
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
         }else{
             String sha1 = commit.treeFileSha1(file);
-            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
-            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            byte[] fileContent = getFileContentsFromBlobSha1(sha1);
             Utils.writeContents(file, fileContent);
         }
     }
@@ -403,19 +396,13 @@ public class Repository {
         isInitialized();
 
         // get checkout branch head commit
-        File file = join(BRANCH_HEAD_DIR, branch);
-        if (!file.exists()){
-            throw new GitletException(NO_SUCH_BRANCH_EXISTS_MESSAGE);
-        }
         String head = getHead();
         if (head.equals(branch)){
             throw new GitletException(NO_NEED_TO_CHECKOUT_THE_CURRENT_BRANCH_MESSAGE);
         }
-        String checkoutCommitID = readContentsAsString(file);
-        Commit checkoutCommit = getCommitbyId(checkoutCommitID);
+        Commit checkoutCommit = getBranchCommit(branch);
         // get current commit
-        String currentCommitID = getParentCommitID();
-        Commit currentCommit = getCommitbyId(currentCommitID);
+        Commit currentCommit = getHeadCommit();
 
         // If a working file is untracked in the current branch and would be overwritten by the checkout,
         // print "There is an untracked file in the way; delete it, or add and commit it first." and exit;
@@ -449,7 +436,7 @@ public class Repository {
         }else{
             try {
                 file.createNewFile();
-                String parentCommitID = getParentCommitID();
+                String parentCommitID = getHeadCommitID();
                 Utils.writeContents(file, parentCommitID);
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -491,7 +478,7 @@ public class Repository {
         isInitialized();
 
         Commit commit = getCommitbyAbbrID(commitID);
-        String currentCommitID = getParentCommitID();
+        String currentCommitID = getHeadCommitID();
         Commit currentCommit = getCommitbyId(currentCommitID);
 
         // If a working file is untracked in the current branch and would be overwritten by the checkout,
@@ -510,6 +497,164 @@ public class Repository {
         Index index = getIndex();
         clearIndex(index);
 
+    }
+
+    /**
+     * Merges files from the given branch into the current branch
+     * @param branch
+     */
+    public void merge(String branch){
+        isInitialized();
+        // check if the branch == head branch
+        String head = getHead();
+        if (head.equals(branch)){
+            throw new GitletException(CANNOT_MERGE_WITH_ITSELF_MESSAGE);
+        }
+
+        // get the branch commit
+        Commit branchCommit = getBranchCommit(branch);
+        String branchCommitSha1 = branchCommit.getSha1();
+
+        // get head commit
+        Commit headCommit = getHeadCommit();
+        String headCommitSha1 = headCommit.getSha1();
+
+        // get the split point
+        String splitPoint = getSplitPoint(headCommit, branchCommit);
+        Commit splitPointCommit = getCommitbyId(splitPoint);
+        // If the split point is the same commit as the given branch, then we do nothing;
+        //A---B---C---D---E (master)
+        //     \
+        //      F---G---B (feature)
+        if (splitPoint.equals(branchCommitSha1)){
+            System.out.println(GIVEN_BRANCH_IS_ANCESTOR_MESSAGE);
+            System.exit(0);
+        }
+        //If the split point is the current branch, then the effect is to check out the given branch
+        //A---B---C (current-branch)
+        //         \
+        //          E---F---G (given-branch)
+        // A---B---C---E---F---G (current-branch, given-branch)
+        if (splitPoint.equals(headCommitSha1)){
+            checkoutBranch(branch);
+            System.out.println(BRANCH_FAST_FORWARDED_MESSAGE);
+            System.exit(0);
+        }
+        Map<String, String> branchCommitFiles = branchCommit.getTreeFiles();
+        Map<String, String> headCommitFiles = headCommit.getTreeFiles();
+        Map<String, String> splitPointCommitFiles = splitPointCommit.getTreeFiles();
+
+        Set<String> files = new HashSet<>();
+        files.addAll(branchCommitFiles.keySet());
+        files.addAll(headCommitFiles.keySet());
+        files.addAll(splitPointCommitFiles.keySet());
+        // get index
+        Index index = getIndex();
+        // check if the staged area is clea
+        boolean isClean = index.isClean();
+        if (!isClean){
+            throw new GitletException(UNCOMMITTED_CHANGES_MESSAGE);
+        }
+        // check file consistence
+        checkFileConsistenceBetweenCommits(headCommit, branchCommit);
+
+        // staged for addition(compare head and result)
+        // perform the 8 merge conditions
+
+        /**
+         *      splitPoint   head     branch    result
+         * 1.    A           A         !A        !A      staged for addition
+         * 2.    A          !A          A        !A      do nothing
+         * 3.a   A          B           B                do nothing
+         * 3.b   A          X           X                do nothing
+         * 4.    X          A           X       A        do nothing
+         * 5.    X          X           A       A        staged for addition
+         * 6.    A          A           X       X       staged for remove
+         * 7.    A          X           A       X       do nothing
+         * 8.a   A          B           C       conflict
+         * 8.b   A          B/X         X/B     conflict
+         * 8.c   X          B           C       conflictt
+         */
+        boolean conflict = false;
+        for (String file : files) {
+            String branchContent = getContent(branchCommitFiles, file);
+            String headContent = getContent(headCommitFiles, file);
+            String splitPointContent = getContent(splitPointCommitFiles, file);
+            if (branchContent != null && headContent != null && splitPointContent != null
+            && splitPointContent.equals(headContent) && !splitPointContent.equals(branchContent)){
+                byte[] fileContents = getFileContentsFromBlobSha1(branchContent);
+                Utils.writeContents(file, fileContents);
+                index.addFileForAddition(file, branchContent);
+            }/*else if (branchContent != null && headContent != null && splitPointContent != null
+            && !splitPointContent.equals(headContent) && splitPointContent.equals(branchContent)){
+                // do nothing
+            } else if (branchContent == null && headContent == null && splitPointContent != null) {
+                // do nothing
+            }else if (branchContent != null && headContent != null && splitPointContent != null
+            && !splitPointContent.equals(headContent) && headContent.equals(branchContent)){
+                // do nothing
+            }else if (splitPointContent == null && headContent != null && branchContent == null){
+                // do nothing
+            }*/else if (splitPointContent == null && headContent == null && branchContent != null){
+                byte[] fileContents = getFileContentsFromBlobSha1(branchContent);
+                Utils.writeContents(file, fileContents);
+                index.addFileForAddition(file, branchContent);
+            }else if (splitPointContent != null && headContent != null && branchContent == null
+            && splitPointContent.equals(headContent)){
+                File file1 = new File(file);
+                file1.delete();
+                index.addFileForRemoval(file);
+            }/*else if (splitPointContent != null && headContent == null && branchContent != null
+                    && splitPointContent.equals(branchContent)){
+                // do nothing
+            }*/else if (branchContent != null && headContent != null && splitPointContent != null
+            && !splitPointContent.equals(headContent) && !splitPointContent.equals(branchContent) && !headContent.equals(branchContent)){
+                handleMergeConflict(file, headContent, branchContent);
+                conflict = true;
+            }else if (splitPointContent != null && headContent != null && branchContent == null && !splitPointContent.equals(headContent)){
+                handleMergeConflict(file, headContent, branchContent);
+                conflict = true;
+            }else if (splitPointContent != null && headContent == null && branchContent != null && !splitPointContent.equals(branchContent)){
+                handleMergeConflict(file, headContent, branchContent);
+                conflict = true;
+            }else if (splitPointContent == null && headContent != null && branchContent != null && !branchContent.equals(headContent)){
+                handleMergeConflict(file, headContent, branchContent);
+                conflict = true;
+            }
+        }
+
+        // make commit
+        String msg = "Merged " + branch + " into" + head;
+        commitForMerge(msg, index, headCommit, branchCommit);
+
+        if (conflict){
+            System.out.println(MERFE_CONFLICT_MESSAGE);
+        }
+        
+    }
+
+    private void commitForMerge(String msg, Index index, Commit headCommit, Commit branchCommit) {
+
+        if (index.isClean()){
+            System.out.println(NO_INDEX_CHAGED_MESSAGE);
+            return;
+        }
+
+        Tree parentTree = headCommit.getTree();
+        Tree tree = buildTree(index, parentTree);
+        LocalDateTime time = LocalDateTime.now();
+        List<String> parentCommits = Arrays.asList(headCommit.getSha1(), branchCommit.getSha1());
+        Commit commit = new Commit(time, msg, parentCommits, index, tree);
+
+        persistObject(commit);
+        persistObject(tree);
+        clearIndex(index);
+        updateCurrentBranch(commit.getSha1());
+
+        // write commit metadata to logs/HEAD
+        String unixTimestamp = toUnixTimestamp(time);
+        String commitData = commit.getSha1() + " " + unixTimestamp + msg + "\n";
+        Utils.appendContents(LOGS_HEAD, commitData);
     }
 
 
@@ -535,8 +680,7 @@ public class Repository {
         /**
          * 2. get last commit
          */
-        String parentCommitID = getParentCommitID();
-        Commit parentcommit = getCommitbyId(parentCommitID);
+        Commit parentcommit = getHeadCommit();
 
         /**
          * 3. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
@@ -549,12 +693,12 @@ public class Repository {
             Blob blob = new Blob(filePath);
             String sha1 = blob.getSha1();
 
-            if (index.containsFile(filePath)){
+            if (index.stagedFilesContainsFile(filePath)){
                 // file in the stagde area
                 String stagedsha1 = index.getSha1(filePath);
                 if (! sha1.equals(stagedsha1)){
                     persistObject(blob);
-                    index.addFile(filePath, sha1);
+                    index.addFileForAddition(filePath, sha1);
                 }
             }else{
                 // file not in the staged area
@@ -563,11 +707,11 @@ public class Repository {
                     String lastCommitsha1 = parentcommit.getSha1ofStagedFile(filePath);
                     if (! sha1.equals(lastCommitsha1)){
                         persistObject(blob);
-                        index.addFile(filePath, sha1);
+                        index.addFileForAddition(filePath, sha1);
                     }
                 }else{
                     persistObject(blob);
-                    index.addFile(filePath, sha1);
+                    index.addFileForAddition(filePath, sha1);
                 }
             }
         }
@@ -610,23 +754,13 @@ public class Repository {
     /**
      * get the parent commit Id from the HEAD file (gitlet add)
      */
-    private String getParentCommitID(){
+    private String getHeadCommitID(){
         String headContents = Utils.readContentsAsString(HEAD_FILE).trim();
         String branchPath = headContents.substring(5).trim();
         File branchFile = new File(GITLET_DIR, branchPath);
         return Utils.readContentsAsString(branchFile).trim();
     }
 
-    /**
-     * Get the contents of the files in the last commit
-     */
-    private Map<String, String> getLastCommitFilesContents(){
-        String parentCommitId = getParentCommitID();
-        File parentCommitFile = join(OBJECT_DIR, parentCommitId.substring(0, 2), parentCommitId.substring(2));
-        Commit parentCommit = Utils.readObject(parentCommitFile, Commit.class);
-        Map<String, String> files = parentCommit.getstagedFiles();
-        return files;
-    }
 
     /**
      * get parent comit
@@ -635,6 +769,16 @@ public class Repository {
         File parentCommitFile = join(OBJECT_DIR, CommitId.substring(0, 2), CommitId.substring(2));
         Commit Commit = Utils.readObject(parentCommitFile, Commit.class);
         return Commit;
+    }
+
+    /**
+     * get head commit
+     * @return
+     */
+    private Commit getHeadCommit(){
+        String headCommitID = getHeadCommitID();
+        Commit headCommit = getCommitbyId(headCommitID);
+        return headCommit;
     }
 
 
@@ -720,7 +864,7 @@ public class Repository {
                 tree.removeFile(file);
             }
         }
-        Map<String, String> stagedFiles = index.getStagedFilesMap();
+        Map<String, String> stagedFiles = index.getStagedFilesForAddition();
         for(Map.Entry<String, String> entry : stagedFiles.entrySet()){
             tree.addFile(entry.getKey(), entry.getValue());
         }
@@ -771,7 +915,7 @@ public class Repository {
         // This includes files that have been staged for removal, but then re-created without Gitlet’s knowledge.
         for(Map.Entry<String, String> entry : filetoSha1.entrySet()){
             String file = entry.getKey();
-            if (!index.containsFile(file) && !currentCommit.getTreeFiles().containsKey(file)){
+            if (!index.stagedFilesContainsFile(file) && !currentCommit.getTreeFiles().containsKey(file)){
                 untrackedFiles.add(file);
             }
         }
@@ -896,11 +1040,99 @@ public class Repository {
         for(Map.Entry<String, String> entry : checkoutCommit.getTreeFiles().entrySet()){
             String file1 = entry.getKey();
             String sha1 = entry.getValue();
-            byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
-            byte[] fileContent = getFileContentFromBlobObject(bytes);
+            byte[] fileContent = getFileContentsFromBlobSha1(sha1);
             Utils.writeContents(file1, fileContent);
         }
     }
+
+    /**
+     * get the branch head commit and do some basic check
+     * @param branch
+     * @return
+     */
+    private Commit getBranchCommit(String branch){
+        File file = join(BRANCH_HEAD_DIR, branch);
+        if (!file.exists()){
+            throw new GitletException(NO_SUCH_BRANCH_EXISTS_MESSAGE);
+        }
+        String commitID = readContentsAsString(file);
+        Commit commit = getCommitbyId(commitID);
+        return commit;
+    }
+
+
+    /**
+     * get the parentCommits of this commit(including itself)
+     * @param headCommit
+     *        A---B---C---D---E
+     * return A---B---C---D---E
+     * @return
+     */
+    private List<String> getParentCommits(Commit headCommit){
+        List<String> parentCommits = new ArrayList<>();
+        parentCommits.add(headCommit.getSha1());
+        String parentCommit = headCommit.getParentCommitID().get(0);
+        while(parentCommit != null){
+            parentCommits.add(parentCommit);
+            Commit commit = getCommitbyId(parentCommit);
+            parentCommit = commit.getParentCommitID().get(0);
+        }
+        Collections.reverse(parentCommits);
+        return parentCommits;
+    }
+
+    /**
+     * get the split point for merge command
+     * @param headCommit
+     * @param branchCommit
+     * @return
+     */
+    private String getSplitPoint(Commit headCommit, Commit branchCommit){
+        List<String> parentCommitsforHeadCommit = getParentCommits(headCommit);
+        List<String> parentCommitsforBranchCommit = getParentCommits(branchCommit);
+        String splitPoint = null;
+        for (int i = 0; i < parentCommitsforHeadCommit.size(); i++) {
+            if (parentCommitsforHeadCommit.get(i).equals(parentCommitsforBranchCommit.get(i))){
+                splitPoint = parentCommitsforHeadCommit.get(i);
+            }else{
+                break;
+            }
+        }
+        return splitPoint;
+    }
+
+    /**
+     * if the file exists in the tree, return the content, else return null
+     * @param commitTree
+     * @param file
+     * @return
+     */
+    private String getContent(Map<String, String> commitTree, String file){
+        if (commitTree.containsKey(file)){
+            return commitTree.get(file);
+        }else{
+            return null;
+        }
+    }
+
+    private static byte[] getFileContentsFromBlobSha1(String sha1){
+        byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
+        byte[] fileContent = getFileContentFromBlobObject(bytes);
+        return fileContent;
+    }
+
+    private static void handleMergeConflict(String file, String headContentSha1, String branchContentSha1){
+        String head = "<<<<<<< HEAD\n";
+        byte[] headContent = getFileContentsFromBlobSha1(headContentSha1);
+        String separateLine = "=======\n";
+        byte[] branchContent = getFileContentsFromBlobSha1(branchContentSha1);
+        String end = ">>>>>>>";
+        writeContents(file, head, headContent, separateLine, branchContent, end);
+    }
+
+
+
+        
 
 
 
