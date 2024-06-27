@@ -216,9 +216,7 @@ public class Repository {
             if (index.stagedFilesContainsFile(relativePath)){
                 staged = true;
                 index.removeFileforAddition(relativePath);
-            }
-
-            if (parentCommit.treeContainsFile(relativePath)){
+            }else if (parentCommit.treeContainsFile(relativePath)){
                 committed = true;
                 index.addFileForRemoval(relativePath);
                 File file = new File(relativePath);
