@@ -56,7 +56,7 @@ public class Commit implements Persistable {
         return "===\n" +
                 "commit " + sha1HashCode + "\n" +
                 "Data: " + commitTime_ + "\n" +
-                message + ".\n";
+                message + "\n";
     }
 
     private String sha1(){

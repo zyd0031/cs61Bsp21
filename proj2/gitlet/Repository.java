@@ -100,11 +100,60 @@ public class Repository {
      */
     public void add(String[] filePaths){
         isInitialized();
+        Index index = getIndex();
         List<String> files = basciCheckFiles(filePaths);
         // get all the files
         List<String> validFiles = getValidFiles(files);
         // then, do the add command
-        add_(validFiles);
+
+        Commit parentcommit = getHeadCommit();
+        Map<String, String> treeFiles = parentcommit.getTreeFiles();
+
+        /**
+         * 3. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
+         * must meet the conditions
+         * a. not exists in the staging area
+         * b. exists in the staging area, but the content changed
+         * c. content different from last commit
+         */
+        for (String filePath : validFiles){
+            Blob blob = new Blob(filePath);
+            String sha1 = blob.getSha1();
+            String relativePath = getRelativePathtoCWD(filePath);
+
+            if (index.stagedFilesContainsFile(relativePath)){
+                // file in the stagde area
+                String stagedsha1 = index.getSha1(relativePath);
+                if (!sha1.equals(stagedsha1)){
+                    if (!treeFiles.containsKey(relativePath)){
+                        persistObject(blob);
+                        index.addFileForAddition(relativePath, sha1);
+                    }else{
+                        String treeSha1 = treeFiles.get(relativePath);
+                        if (!treeSha1.equals(sha1)){
+                            persistObject(blob);
+                            index.addFileForAddition(relativePath, sha1);
+                        }else{
+                            index.removeFileforAddition(relativePath);
+                        }
+                    }
+                }
+            }else if (!index.stagedFilesContainsFile(relativePath)){
+                // file not in the staged area
+                // check if it is same as last commit
+                if (treeFiles.containsKey(relativePath)){
+                    String lastCommitsha1 = treeFiles.get(relativePath);
+                    if (! sha1.equals(lastCommitsha1)){
+                        persistObject(blob);
+                        index.addFileForAddition(relativePath, sha1);
+                    }
+                }else{
+                    persistObject(blob);
+                    index.addFileForAddition(relativePath, sha1);
+                }
+            }
+        }
+        Utils.writeObject(INDEX_FILE, index);
     }
 
     /**
@@ -656,70 +705,6 @@ public class Repository {
 
 
     /**
-     * the main part of add
-     */
-    private void add_(List<String> filePaths){
-        /** 1. read the index file if it exists else create one */
-        Index index = getIndex();
-
-        /**
-         * 2. get last commit
-         */
-        Commit parentcommit = getHeadCommit();
-        Map<String, String> treeFiles = parentcommit.getTreeFiles();
-
-        /**
-         * 3. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
-         * must meet the conditions
-         * a. not exists in the staging area
-         * b. exists in the staging area, but the content changed
-         * c. content different from last commit
-         */
-        for (String filePath : filePaths){
-            Blob blob = new Blob(filePath);
-            String sha1 = blob.getSha1();
-            String relativePath = getRelativePathtoCWD(filePath);
-
-            if (index.stagedFilesContainsFile(relativePath)){
-                // file in the stagde area
-                String stagedsha1 = index.getSha1(relativePath);
-                if (!sha1.equals(stagedsha1)){
-                    if (!treeFiles.containsKey(relativePath)){
-                        persistObject(blob);
-                        index.addFileForAddition(relativePath, sha1);
-                    }else{
-                        String treeSha1 = treeFiles.get(relativePath);
-                        if (!treeSha1.equals(stagedsha1)){
-                            persistObject(blob);
-                            index.addFileForAddition(relativePath, sha1);
-                        }
-
-                    }
-                }
-            }else if (index.stagedFilesContainsFile(relativePath)){
-                // file not in the staged area
-                // check if it is same as last commit
-                if (treeFiles.containsKey(relativePath)){
-                    String lastCommitsha1 = treeFiles.get(relativePath);
-                    if (! sha1.equals(lastCommitsha1)){
-                        persistObject(blob);
-                        index.addFileForAddition(relativePath, sha1);
-                    }
-                }else{
-                    persistObject(blob);
-                    index.addFileForAddition(relativePath, sha1);
-                }
-            }else if (index.stagedFilesForRemovalContainsFile(relativePath)){
-                String lastCommitsha1 = treeFiles.get(relativePath);
-                byte[] fileContentsFromBlobSha1 = getFileContentsFromBlobSha1(lastCommitsha1);
-                Utils.writeContents(relativePath, fileContentsFromBlobSha1);
-                index.removeFileForRemoval(relativePath);
-            }
-        }
-        Utils.writeObject(INDEX_FILE, index);
-    }
-
-    /**
      * check whether thi repo is initialized
      */
     private void isInitialized(){
@@ -729,12 +714,9 @@ public class Repository {
         }
     }
 
-    /**
-     * check whether the file exist or inside this repo
-     * return the valid files(exclude gitlet)
-     * @param filePaths
-     */
-    private static List<String> basciCheckFiles(String[] filePaths){
+
+
+    private List<String> basciCheckFiles(String[] filePaths){
         List<String> validPaths = new ArrayList<>();
         Path repoRootPath = CWD.toPath();
         for (String filePath : filePaths) {
@@ -875,22 +857,6 @@ public class Repository {
             tree.addFile(entry.getKey(), entry.getValue());
         }
         return tree;
-    }
-
-
-
-    /**
-     * do some basic check
-     * @param filePaths
-     * @return
-     */
-    private void basicCheck(String[] filePaths){
-        // check if it is inside a repository
-        isInitialized();
-
-        // check whether the files are within the current repository
-        basciCheckFiles(filePaths);
-
     }
 
     private Index getIndex(){
