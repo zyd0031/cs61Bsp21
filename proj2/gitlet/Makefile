@@ -19,6 +19,7 @@
 JFLAGS = -g -Xlint:unchecked -Xlint:deprecation
 
 CLASSDIR = ../classes
+PACKAGE = gitlet
 
 # See comment in ../Makefile
 PYTHON = python3
@@ -35,14 +36,14 @@ LIB = ../../library-sp21/javalib/*
 CPATH = "$(LIB):..:$(CLASSPATH):;$(LIB);..;$(CLASSPATH)"
 
 # All .java files in this directory.
-SRCS := $(wildcard *.java)
+SRCS := $(wildcard *.java) $(wildcard constant/*.java) $(wildcard exception/*.java)
 
 .PHONY: default check clean
 
 # As a convenience, you can compile a single Java file X.java in this directory
 # with 'make X.class'
 %.class: %.java
-	javac $(JFLAGS) -cp $(CPATH) $<
+	javac $(JFLAGS) -cp $(CPATH) -d $(CLASSDIR) $<
 
 # First, and therefore default, target.
 default: sentinel
@@ -54,11 +55,16 @@ integration:
 	$(RMAKE) -C .. PYTHON=$(PYTHON) integration
 
 # 'make clean' will clean up stuff you can reconstruct.
+#clean:
+#	$(RM) *~ $(CLASSDIR)/$(PACKAGE)/*.class sentinel
+
 clean:
-	$(RM) *~ *.class sentinel
+	-find $(CLASSDIR) -type f -name '*.class' -delete
+	-rm -f *~ sentinel
+
 
 ### DEPENDENCIES ###
 
 sentinel: $(SRCS)
-	javac $(JFLAGS) -cp $(CPATH) $(SRCS)
+	javac $(JFLAGS) -cp $(CPATH) -d $(CLASSDIR) $(SRCS)
 	touch sentinel

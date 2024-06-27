@@ -1,7 +1,6 @@
 package gitlet;
 
 import gitlet.exception.GitletException;
-
 import java.util.Arrays;
 
 import static gitlet.constant.MessageConstant.*;
@@ -30,11 +29,7 @@ public class Main {
                 }
                 break;
             case "add":
-                if (args[1].equals("*")) {
-                    repo.addAll();
-                }else{
-                    repo.add(Arrays.stream(args).skip(1).toArray(String[]::new));
-                }
+                repo.add(Arrays.stream(args).skip(1).toArray(String[]::new));
                 break;
             case "commit":
                 if (args.length == 1) {
@@ -125,8 +120,7 @@ public class Main {
                 break;
             default:
                 throw new GitletException(INVALID_COMMAND_MESSAGE);
-
-
         }
     }
+
 }

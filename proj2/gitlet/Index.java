@@ -5,10 +5,12 @@ import java.util.*;
 
 public class Index implements Serializable {
     private static final long serialVersionUID = 2341433L;
-    private Map<String, String> stagedFilesForAddition = new HashMap<>(); // Map<FilePath, BlobSha1Hash>
-    private List<String> stagedFilesForRemoval = new ArrayList<>();
+    private Map<String, String> stagedFilesForAddition; // Map<FilePath, BlobSha1Hash>
+    private List<String> stagedFilesForRemoval;
 
     public Index() {
+        stagedFilesForAddition = new HashMap<>();
+        stagedFilesForRemoval = new ArrayList<>();
     }
 
 
@@ -44,6 +46,20 @@ public class Index implements Serializable {
         return stagedFilesForAddition.containsKey(file);
     }
 
+    public boolean stagedFilesForRemovalContainsFile(String file){
+        return stagedFilesForRemoval.contains(file);
+    }
+
+    public boolean containsFile(String file){
+        if (stagedFilesForAddition.containsKey(file)){
+            return true;
+        }
+        if (stagedFilesForRemoval.contains(file)){
+            return true;
+        }
+        return false;
+    }
+
     /**
      * get sha1Hash of file
      * @param file
@@ -69,7 +85,11 @@ public class Index implements Serializable {
         stagedFilesForRemoval.add(file);
     }
 
-    public void removeFile(String file){
+    public void removeFileForRemoval(String file){
+        stagedFilesForRemoval.remove(file);
+    }
+
+    public void removeFileforAddition(String file){
         stagedFilesForAddition.remove(file);
     }
 

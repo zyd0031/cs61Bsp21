@@ -56,13 +56,16 @@ public class Tree implements Persistable {
 
     @Override
     public String getSha1(){
-        List<String> list = new ArrayList<>();
+        if (files.isEmpty()){
+            return "0".repeat(40);
+        }
+
+        StringBuffer sb = new StringBuffer();
         for (String filePath : files.keySet()) {
             Blob blob = new Blob(filePath);
-            StringBuffer sb = new StringBuffer();
             sb.append("100644 blob ").append(blob.getSha1()).append("\0").append(filePath);
-            list.add(sb.toString());
         }
-        return Utils.sha1(list);
+
+        return Utils.sha1(sb.toString());
     }
 }

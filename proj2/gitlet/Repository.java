@@ -33,8 +33,9 @@ public class Repository {
     public static final File OBJECT_DIR = join(GITLET_DIR, "objects");
     // store the head of each branch
     public static final File BRANCH_HEAD_DIR = join(GITLET_DIR, "refs", "heads");
+    public static final File LOGS = join(GITLET_DIR, "logs");
     public static final File LOGS_HEAD = join(GITLET_DIR, "logs", "HEAD");
-    public static final File[] DIRS = {GITLET_DIR, OBJECT_DIR, BRANCH_HEAD_DIR};
+    public static final File[] DIRS = {GITLET_DIR, OBJECT_DIR, BRANCH_HEAD_DIR, LOGS};
     public static final File[] FILES = {HEAD_FILE, INDEX_FILE, LOGS_HEAD};
 
 
@@ -53,7 +54,7 @@ public class Repository {
             if (dir.exists()){
                 dir.delete();
             }
-            dir.mkdir();
+            dir.mkdirs();
         }
         // crete the files
         for (File file : FILES) {
@@ -78,7 +79,7 @@ public class Repository {
         Instant epoch0 = Instant.EPOCH;
         LocalDateTime initialCommitTime = LocalDateTime.ofInstant(epoch0, ZoneOffset.UTC);
         String msg = "initial commit";
-        Commit initCommit = new Commit(initialCommitTime, msg, null, null, new Tree());
+        Commit initCommit = new Commit(initialCommitTime, msg, null, new Index(), new Tree());
         persistObject(initCommit);
 
         // set the current branch to master
@@ -87,27 +88,23 @@ public class Repository {
         // create a master branch and point to the initial commit
         File masterHead = join(BRANCH_HEAD_DIR, "master");
         Utils.writeContents(masterHead, initCommit.getSha1());
+
+        String unixTimestamp = toUnixTimestamp(initialCommitTime);
+        String commitData = initCommit.getSha1() + " " + unixTimestamp + " " + msg + "\n";
+        Utils.appendContents(LOGS_HEAD, commitData);
+
     }
 
     /**
      * gitlet add a.txt b.txt
      */
     public void add(String[] filePaths){
-        // do some basic check and return the repopath
-        basicCheck(filePaths);
+        isInitialized();
+        List<String> files = basciCheckFiles(filePaths);
+        // get all the files
+        List<String> validFiles = getValidFiles(files);
         // then, do the add command
-        add_(filePaths);
-    }
-
-    /**
-     * gitlet add *
-     */
-    public void addAll(){
-        // list all files under this repo
-        List<String> files = listAllFiles(CWD);
-        String[] filesArray = files.toArray(new String[0]);
-        basicCheck(filesArray);
-        add_(filesArray);
+        add_(validFiles);
     }
 
     /**
@@ -141,7 +138,7 @@ public class Repository {
 
         // write commit metadata to logs/HEAD
         String unixTimestamp = toUnixTimestamp(time);
-        String commitData = commit.getSha1() + " " + unixTimestamp + msg + "\n";
+        String commitData = commit.getSha1() + " " + unixTimestamp + " " + msg + "\n";
         Utils.appendContents(LOGS_HEAD, commitData);
 
     }
@@ -150,9 +147,10 @@ public class Repository {
      * gitlet rm
      */
     public void rm(String[] filePaths){
-        // do some basic check and return the repopath
-        basicCheck(filePaths);
-
+        isInitialized();
+        List<String> files = basciCheckFiles(filePaths);
+        // get all the files
+        List<String> validFiles = getValidFiles(files);
         // the main part of rm
         // 1. read the index file
         Index index = getIndex();
@@ -161,23 +159,23 @@ public class Repository {
         Commit parentCommit = getHeadCommit();
 
         // 3. the main part of rm
-        for (String filePath : filePaths) {
+        for (String filePath : validFiles) {
             boolean staged = false;
             boolean committed = false;
+            String relativePath = getRelativePathtoCWD(filePath);
 
-            if (index.stagedFilesContainsFile(filePath)){
+            if (index.stagedFilesContainsFile(relativePath)){
                 staged = true;
-                index.removeFile(filePath);
+                index.removeFileforAddition(relativePath);
             }
 
-            if (parentCommit.treeContainsFile(filePath)){
+            if (parentCommit.treeContainsFile(relativePath)){
                 committed = true;
-                index.addFileForRemoval(filePath);
-            }
-
-            File file = new File(filePath);
-            if (file.exists()){
-                file.delete();
+                index.addFileForRemoval(relativePath);
+                File file = new File(relativePath);
+                if (file.exists()){
+                    file.delete();
+                }
             }
 
             if (!staged && !committed){
@@ -194,14 +192,13 @@ public class Repository {
         // check whether it is initialized
         isInitialized();
 
-        Commit parentCommit = getHeadCommit();
-        System.out.println(parentCommit);
+        Commit commit = getHeadCommit();
+        System.out.println(commit);
 
-        String commitId = parentCommit.getParentCommitID().get(0);
-        while(commitId != null){
-            Commit commit = getCommitbyId(commitId);
+        while (commit.getParentCommitID() != null){
+            String commitId = commit.getParentCommitID().get(0);
+            commit = getCommitbyId(commitId);
             System.out.println(commit);
-            commitId = commit.getParentCommitID().get(0);
         }
 
     }
@@ -285,9 +282,7 @@ public class Repository {
             stagedFilesForRemoval.forEach(file -> System.out.println(file));
         }
         System.out.println();
-
-
-        // ——————————————————————————————————————————————————————————
+        
         Commit parentCommit = getHeadCommit();
         Map<String, String> treefiles = parentCommit.getTreeFiles();
         Map<String, String> filetoSha1 = listFiletoSha1(CWD);
@@ -302,12 +297,13 @@ public class Repository {
         for(Map.Entry<String, String> entry : treefiles.entrySet()){
             String file = entry.getKey();
             String sha1 = entry.getValue();
-            if (!filetoSha1.getOrDefault(file, "").equals(sha1) && !index.stagedFilesContainsFile(file)){
-                modifiedNotStaged.add(file);
-            }
             File file1 = new File(file);
             if (!stagedFilesForRemoval.contains(file) && !file1.exists()){
                 deletedNotStaged.add(file);
+                continue;
+            }
+            if (!filetoSha1.getOrDefault(file, "").equals(sha1) && !index.containsFile(file)){
+                modifiedNotStaged.add(file);
             }
         }
 
@@ -317,16 +313,16 @@ public class Repository {
             String workSha1 = filetoSha1.get(file);
             if (workSha1 == null){
                 // Staged for addition, but deleted in the working directory
-                modifiedNotStaged.add(file);
+                deletedNotStaged.add(file);
             } else if (!workSha1.equals(sha1)){
                 // Staged for addition, but with different contents than in the working directory;
                 modifiedNotStaged.add(file);
             }
         }
         modifiedNotStaged.sort(String::compareTo);
-        deletedNotStaged.sort(String::compareTo);
-        deletedNotStaged.forEach(file -> System.out.println(file + ("deleted")));
-        modifiedNotStaged.forEach(file -> System.out.println(file + ("modified")));
+        Set<String> deletedNotStagedFiles = new TreeSet<>(deletedNotStaged);
+        deletedNotStagedFiles.forEach(file -> System.out.println(file + " (deleted)"));
+        modifiedNotStaged.forEach(file -> System.out.println(file + " (modified)"));
         System.out.println();
 
         // Untracked Files
@@ -346,12 +342,12 @@ public class Repository {
      */
     public void checkFile(String file){
         isInitialized();
-
+        String relativePath = getRelativePathtoCWD(file);
         Commit headCommit = getHeadCommit();
-        if (headCommit.treeContainsFile(file)){
-            String sha1 = headCommit.treeFileSha1(file);
+        if (headCommit.treeContainsFile(relativePath)){
+            String sha1 = headCommit.treeFileSha1(relativePath);
             byte[] fileContent = getFileContentsFromBlobSha1(sha1);
-            Utils.writeContents(file, fileContent);
+            Utils.writeContents(relativePath, fileContent);
         }else{
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
         }
@@ -367,19 +363,19 @@ public class Repository {
      */
     public void checkoutCommitFile(String commitId, String file){
         isInitialized();
-
+        String relativePath = getRelativePathtoCWD(file);
         File file1 = join(OBJECT_DIR, commitId.substring(0, 2), commitId.substring(2));
         if (!file1.exists()){
             throw new GitletException(NO_COMMIT_WITH_THAT_ID_EXIST_MESSAGE);
         }
         Commit commit = getCommitbyAbbrID(commitId);
 
-        if (!commit.treeContainsFile(file)){
+        if (!commit.treeContainsFile(relativePath)){
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
         }else{
-            String sha1 = commit.treeFileSha1(file);
+            String sha1 = commit.treeFileSha1(relativePath);
             byte[] fileContent = getFileContentsFromBlobSha1(sha1);
-            Utils.writeContents(file, fileContent);
+            Utils.writeContents(relativePath, fileContent);
         }
     }
 
@@ -424,7 +420,7 @@ public class Repository {
      * Creates a new branch with the given name, and points it at the current head commit.
      * A branch is nothing more than a name for a reference (a SHA-1 identifier) to a commit node.
      * This command does NOT immediately switch to the newly created branch (just as in real Git).
-     * Before you ever call branch, your code should be running with a default branch called “master”.
+     * Before you ever call branch, your code should be running with a default branch called "master".
      * @param branch
      */
     public void branch(String branch){
@@ -662,25 +658,15 @@ public class Repository {
     /**
      * the main part of add
      */
-    private void add_(String[] filePaths){
+    private void add_(List<String> filePaths){
         /** 1. read the index file if it exists else create one */
-        Path indexPath = INDEX_FILE.toPath();
-        Index index;
-        if (! Files.exists(indexPath)){
-            try {
-                Files.createFile(indexPath);
-                index = new Index();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }else{
-            index = Utils.readObject(indexPath.toFile(), Index.class);
-        }
+        Index index = getIndex();
 
         /**
          * 2. get last commit
          */
         Commit parentcommit = getHeadCommit();
+        Map<String, String> treeFiles = parentcommit.getTreeFiles();
 
         /**
          * 3. add files to the staging area and persistence the content of the file to .gitlet/objects/XX/XXXXXXXXX
@@ -692,27 +678,42 @@ public class Repository {
         for (String filePath : filePaths){
             Blob blob = new Blob(filePath);
             String sha1 = blob.getSha1();
+            String relativePath = getRelativePathtoCWD(filePath);
 
-            if (index.stagedFilesContainsFile(filePath)){
+            if (index.stagedFilesContainsFile(relativePath)){
                 // file in the stagde area
-                String stagedsha1 = index.getSha1(filePath);
-                if (! sha1.equals(stagedsha1)){
-                    persistObject(blob);
-                    index.addFileForAddition(filePath, sha1);
+                String stagedsha1 = index.getSha1(relativePath);
+                if (!sha1.equals(stagedsha1)){
+                    if (!treeFiles.containsKey(relativePath)){
+                        persistObject(blob);
+                        index.addFileForAddition(relativePath, sha1);
+                    }else{
+                        String treeSha1 = treeFiles.get(relativePath);
+                        if (!treeSha1.equals(stagedsha1)){
+                            persistObject(blob);
+                            index.addFileForAddition(relativePath, sha1);
+                        }
+
+                    }
                 }
-            }else{
+            }else if (index.stagedFilesContainsFile(relativePath)){
                 // file not in the staged area
                 // check if it is same as last commit
-                if (parentcommit.stagedFilesContainsFile(filePath)){
-                    String lastCommitsha1 = parentcommit.getSha1ofStagedFile(filePath);
+                if (treeFiles.containsKey(relativePath)){
+                    String lastCommitsha1 = treeFiles.get(relativePath);
                     if (! sha1.equals(lastCommitsha1)){
                         persistObject(blob);
-                        index.addFileForAddition(filePath, sha1);
+                        index.addFileForAddition(relativePath, sha1);
                     }
                 }else{
                     persistObject(blob);
-                    index.addFileForAddition(filePath, sha1);
+                    index.addFileForAddition(relativePath, sha1);
                 }
+            }else if (index.stagedFilesForRemovalContainsFile(relativePath)){
+                String lastCommitsha1 = treeFiles.get(relativePath);
+                byte[] fileContentsFromBlobSha1 = getFileContentsFromBlobSha1(lastCommitsha1);
+                Utils.writeContents(relativePath, fileContentsFromBlobSha1);
+                index.removeFileForRemoval(relativePath);
             }
         }
         Utils.writeObject(INDEX_FILE, index);
@@ -728,27 +729,32 @@ public class Repository {
         }
     }
 
-
-    /** chech whether the files indeed exist */
-    private static void isFilesExists(String[] filePaths){
-        for (String path : filePaths) {
-            File file = new File(path);
-            if (!file.exists()){
-                System.out.println(path + " does not exist");
-                System.exit(0);
-            }
-        }
-    }
-
-    private static void isFilesInsideCurrentRepo(String[] filePaths){
+    /**
+     * check whether the file exist or inside this repo
+     * return the valid files(exclude gitlet)
+     * @param filePaths
+     */
+    private static List<String> basciCheckFiles(String[] filePaths){
+        List<String> validPaths = new ArrayList<>();
         Path repoRootPath = CWD.toPath();
         for (String filePath : filePaths) {
+            // check existence
+            File file = new File(filePath);
+            if (!file.exists()){
+                System.out.println(filePath + " does not exist");
+                System.exit(0);
+            }
+            // check inside this repo?
             Path path = Paths.get(filePath).toAbsolutePath();
-            if (!repoRootPath.startsWith(path)){
+            if (!path.startsWith(repoRootPath)){
                 System.out.println("fatal: " + path + " is outside repository at " + repoRootPath);
                 System.exit(0);
             }
+            if (!filePath.equals("gitlet")){
+                validPaths.add(filePath);
+            }
         }
+        return validPaths;
     }
 
     /**
@@ -783,14 +789,13 @@ public class Repository {
 
 
     /**
-     * TODO might be wrong
      * list all files under this repo(exclude .getlet)
      * @param file
      * @return List<filepath relative to CWD>
      */
-    private List<String> listAllFiles(File file){
+    public List<String> listAllFiles(File file){
         List<String> fileList = new ArrayList<>();
-        if (file.isDirectory() && !file.getName().equals(".gitlet")){
+        if (file.isDirectory() && !file.getName().equals(".gitlet") && !file.getName().equals("gitlet")){
             File[] files = file.listFiles();
             if (files != null){
                 for (File subFile : files) {
@@ -798,21 +803,20 @@ public class Repository {
                 }
             }
         }else if (file.isFile()){
-            fileList.add(file.toString());
+            fileList.add(getRelativePathtoCWD(file));
         }
         return fileList;
     }
 
 
     /**
-     * TODO might be wrong
      * get the Map<file, sha1> of all files in this repo
      * @param file
      * @return
      */
     private Map<String, String> listFiletoSha1(File file){
         Map<String, String> filetoSha1 = new HashMap<>();
-        if (file.isDirectory() && !file.getName().equals(".gitlet")){
+        if (file.isDirectory() && !file.getName().equals(".gitlet") && !file.getName().equals("gitlet")){
             File[] files = file.listFiles();
             if (files != null){
                 for (File subFile : files) {
@@ -820,12 +824,14 @@ public class Repository {
                 }
             }
         }else if (file.isFile()){
-            String sha1 = Utils.getSha1(file);
-            String filePath = file.toString();
-            filetoSha1.put(filePath, sha1);
+            Blob blob = new Blob(file.toString());
+            String sha1 = blob.getSha1();
+            String relativePath = getRelativePathtoCWD(file);
+            filetoSha1.put(relativePath, sha1);
         }
         return filetoSha1;
     }
+
 
     /**
      * persistent object
@@ -874,7 +880,7 @@ public class Repository {
 
 
     /**
-     * do some basic check and return the rootPath
+     * do some basic check
      * @param filePaths
      * @return
      */
@@ -882,11 +888,8 @@ public class Repository {
         // check if it is inside a repository
         isInitialized();
 
-        // chech whether the files indeed exist
-        isFilesExists(filePaths);
-
         // check whether the files are within the current repository
-        isFilesInsideCurrentRepo(filePaths);
+        basciCheckFiles(filePaths);
 
     }
 
@@ -901,7 +904,11 @@ public class Repository {
                 throw new RuntimeException(e);
             }
         }else{
-            index = Utils.readObject(indexPath.toFile(), Index.class);
+            if (INDEX_FILE.length() == 0){
+                index = new Index();
+            }else{
+                index = Utils.readObject(indexPath.toFile(), Index.class);
+            }
         }
         return index;
     }
@@ -930,12 +937,11 @@ public class Repository {
     }
 
     /**
-     * TODO might be wrong
      * delete all files under this repo
      * @param file
      */
     private void deleteAllFiles(File file){
-        if (file.isDirectory() && !file.getName().equals(".gitlet")){
+        if (file.isDirectory() && !file.getName().equals(".gitlet") && !file.getName().equals("gitlet")){
             File[] files = file.listFiles();
             if (files != null){
                 for (File subFile : files) {
@@ -1128,6 +1134,35 @@ public class Repository {
         byte[] branchContent = getFileContentsFromBlobSha1(branchContentSha1);
         String end = ">>>>>>>";
         writeContents(file, head, headContent, separateLine, branchContent, end);
+    }
+
+    /**
+     * get the valid file for add/rm *
+     * @param files
+     * @return
+     */
+    private List<String> getValidFiles(List<String> files){
+        List<String> validFiles = new ArrayList<>();
+        for (String validFile : files) {
+            File file = new File(validFile);
+            if (file.isFile()){
+                validFiles.add(validFile);
+            }else if (file.isDirectory()){
+                validFiles.addAll(listAllFiles(file));
+            }
+        }
+        return validFiles;
+    }
+
+    private String getRelativePathtoCWD(File file){
+        Path cwdPath = CWD.toPath().toAbsolutePath().normalize();
+        Path filePath = file.toPath().toAbsolutePath().normalize();
+        String relativePath = cwdPath.relativize(filePath).toString();
+        return relativePath;
+    }
+
+    private String getRelativePathtoCWD(String file){
+        return getRelativePathtoCWD(new File(file));
     }
 
 

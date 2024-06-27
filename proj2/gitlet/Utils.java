@@ -9,10 +9,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Formatter;
-import java.util.List;
+import java.util.*;
 import java.util.zip.InflaterInputStream;
 
 import gitlet.exception.GitletException;
@@ -59,7 +56,7 @@ class Utils {
 
     /** Returns the SHA-1 hash of the concatenation of the strings in
      *  VALS. */
-    static String sha1(List<Object> vals) {
+    static String sha1(List<Objects> vals) {
         return sha1(vals.toArray(new Object[vals.size()]));
     }
 

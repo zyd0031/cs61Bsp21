@@ -46,12 +46,9 @@ public class Commit implements Persistable {
         this.parentCommits = parentCommits;
         this.commitTime = time;
         this.index = index;
-        this.sha1HashCode = sha1();
         this.tree = tree;
+        this.sha1HashCode = sha1();
     }
-
-
-
 
 
     public String toString(){
