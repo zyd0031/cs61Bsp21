@@ -18,9 +18,6 @@ public class Tree implements Persistable {
         this.files = new HashMap<>(tree.files);
     }
 
-    public Tree(HashMap<String, String> files) {
-        this.files = new HashMap<>(files);
-    }
 
     public Tree() {
         this.files = new HashMap<>();
@@ -58,11 +55,11 @@ public class Tree implements Persistable {
         }
 
         StringBuffer sb = new StringBuffer();
-        for (String filePath : files.keySet()) {
-            Blob blob = new Blob(filePath);
-            sb.append("100644 blob ").append(blob.getSha1()).append("\0").append(filePath);
+        for(Map.Entry<String, String> entry : files.entrySet()){
+            String path = entry.getKey();
+            String hash = entry.getValue();
+            sb.append("100644 blob ").append(hash).append("\0").append(path);
         }
-
         return Utils.sha1(sb.toString());
     }
 }

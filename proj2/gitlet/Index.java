@@ -42,7 +42,7 @@ public class Index implements Serializable {
      * @param file
      * @return
      */
-    public boolean stagedFilesContainsFile(String file){
+    public boolean stagedFilesForAdditionContainsFile(String file){
         return stagedFilesForAddition.containsKey(file);
     }
 

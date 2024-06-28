@@ -80,23 +80,14 @@ public class Commit implements Persistable {
         return sha1HashCode;
     }
 
-
     public Tree getTree(){
         return tree;
     }
 
-    public Map<String, String> getstagedFiles(){
-        return index.getStagedFilesForAddition();
-    }
 
     public List<String> getParentCommitID(){
         return parentCommits;
     }
-
-    public LocalDateTime getCommitTime(){
-        return commitTime;
-    }
-
 
     /**
      * check whether the tree contains file
@@ -111,18 +102,9 @@ public class Commit implements Persistable {
         return tree.getFileSha1(file);
     }
 
-    public boolean stagedFilesContainsFile(String file){
-        return index.stagedFilesContainsFile(file);
-    }
-
-    public String getSha1ofStagedFile(String file){
-        return index.getSha1(file);
-    }
-    
     public Map<String, String> getTreeFiles(){
         Map<String, String> files = tree.getFiles();
         return files;
-
     }
 
 }

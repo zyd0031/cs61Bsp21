@@ -121,7 +121,7 @@ public class Repository {
             Blob blob = new Blob(relativePath);
             String sha1 = blob.getSha1();
 
-            if (index.stagedFilesContainsFile(relativePath)){
+            if (index.stagedFilesForAdditionContainsFile(relativePath)){
                 // file in the stagde area
                 String stagedsha1 = index.getSha1(relativePath);
                 if (!sha1.equals(stagedsha1)){
@@ -138,7 +138,7 @@ public class Repository {
                         }
                     }
                 }
-            }else if (!index.stagedFilesContainsFile(relativePath)){
+            }else if (!index.stagedFilesForAdditionContainsFile(relativePath)){
                 // file not in the staged area
                 // check if it is same as last commit
                 if (treeFiles.containsKey(relativePath)){
@@ -197,15 +197,14 @@ public class Repository {
      */
     public void rm(String[] filePaths){
         isInitialized();
-        List<String> files = basciCheckFiles(filePaths);
-        // get all the files
-        List<String> validFiles = getValidFiles(files);
-        // the main part of rm
         // 1. read the index file
         Index index = getIndex();
 
         // 2. read the current commit
         Commit parentCommit = getHeadCommit();
+        List<String> files = basciCheckFilesForRm(filePaths, parentCommit);
+        // get all the files
+        List<String> validFiles = getValidFilesForRm(files, parentCommit);
 
         // 3. the main part of rm
         for (String filePath : validFiles) {
@@ -213,7 +212,7 @@ public class Repository {
             boolean committed = false;
             String relativePath = getRelativePathtoCWD(filePath);
 
-            if (index.stagedFilesContainsFile(relativePath)){
+            if (index.stagedFilesForAdditionContainsFile(relativePath)){
                 staged = true;
                 index.removeFileforAddition(relativePath);
             }else if (parentCommit.treeContainsFile(relativePath)){
@@ -737,6 +736,34 @@ public class Repository {
         return validPaths;
     }
 
+    private List<String> basciCheckFilesForRm(String[] filePaths, Commit parentCommit){
+        List<String> validPaths = new ArrayList<>();
+        Path repoRootPath = CWD.toPath();
+        for (String filePath : filePaths) {
+            String relativePath = getRelativePathtoCWD(filePath);
+            if (parentCommit.treeContainsFile(relativePath)){
+                validPaths.add(relativePath);
+                continue;
+            }
+            // check existence
+            File file = new File(relativePath);
+            if (!file.exists()){
+                System.out.println(relativePath + " does not exist");
+                System.exit(0);
+            }
+            // check inside this repo?
+            Path path = Paths.get(filePath).toAbsolutePath();
+            if (!path.startsWith(repoRootPath)){
+                System.out.println("fatal: " + path + " is outside repository at " + repoRootPath);
+                System.exit(0);
+            }
+            if (!filePath.equals("gitlet")){
+                validPaths.add(filePath);
+            }
+        }
+        return validPaths;
+    }
+
     /**
      * get the parent commit Id from the HEAD file (gitlet add)
      */
@@ -886,7 +913,7 @@ public class Repository {
         // This includes files that have been staged for removal, but then re-created without Gitlet’s knowledge.
         for(Map.Entry<String, String> entry : filetoSha1.entrySet()){
             String file = entry.getKey();
-            if (!index.stagedFilesContainsFile(file) && !currentCommit.getTreeFiles().containsKey(file)){
+            if (!index.stagedFilesForAdditionContainsFile(file) && !currentCommit.getTreeFiles().containsKey(file)){
                 untrackedFiles.add(file);
             }
         }
@@ -1041,11 +1068,10 @@ public class Repository {
     private List<String> getParentCommits(Commit headCommit){
         List<String> parentCommits = new ArrayList<>();
         parentCommits.add(headCommit.getSha1());
-        String parentCommit = headCommit.getParentCommitID().get(0);
-        while(parentCommit != null){
+        while(headCommit.getParentCommitID() != null){
+            String parentCommit = headCommit.getParentCommitID().get(0);
             parentCommits.add(parentCommit);
-            Commit commit = getCommitbyId(parentCommit);
-            parentCommit = commit.getParentCommitID().get(0);
+            headCommit = getCommitbyId(parentCommit);
         }
         Collections.reverse(parentCommits);
         return parentCommits;
@@ -1061,7 +1087,8 @@ public class Repository {
         List<String> parentCommitsforHeadCommit = getParentCommits(headCommit);
         List<String> parentCommitsforBranchCommit = getParentCommits(branchCommit);
         String splitPoint = null;
-        for (int i = 0; i < parentCommitsforHeadCommit.size(); i++) {
+        int minSize = Math.min(parentCommitsforHeadCommit.size(), parentCommitsforBranchCommit.size());
+        for (int i = 0; i < minSize; i++) {
             if (parentCommitsforHeadCommit.get(i).equals(parentCommitsforBranchCommit.get(i))){
                 splitPoint = parentCommitsforHeadCommit.get(i);
             }else{
@@ -1108,6 +1135,23 @@ public class Repository {
     private List<String> getValidFiles(List<String> files){
         List<String> validFiles = new ArrayList<>();
         for (String validFile : files) {
+            File file = new File(validFile);
+            if (file.isFile()){
+                validFiles.add(validFile);
+            }else if (file.isDirectory()){
+                validFiles.addAll(listAllFiles(file));
+            }
+        }
+        return validFiles;
+    }
+
+    private List<String> getValidFilesForRm(List<String> files, Commit parentCommit){
+        List<String> validFiles = new ArrayList<>();
+        for (String validFile : files) {
+            if (parentCommit.treeContainsFile(validFile)){
+                validFiles.add(validFile);
+                continue;
+            }
             File file = new File(validFile);
             if (file.isFile()){
                 validFiles.add(validFile);
