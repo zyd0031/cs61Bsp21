@@ -26,9 +26,6 @@ public class Tree implements Persistable {
         this.files = new HashMap<>();
     }
 
-    public String getType(){
-        return "Tree";
-    }
 
     public void addFile(String path, String hash){
         files.put(path, hash);

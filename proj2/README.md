@@ -3,48 +3,51 @@ A version-control system that mimics some of the basic features of the Git.
 ## Complie
 Simply type `make`
 ## Run
-Init:
+### Init:
 `java gitlet.Main init`
 
-Add:
+### Add:
 `java gitlet.Main add [file name]`
 
-Commit:
+
+### Commit:
 `java gitlet.Main commit [message]`
 
-Rm:
+### Rm:
 `java gitlet.Main rm [file name]`
 
-Log:
+### Log:
 `java gitlet.Main log`
 
-Global-log:
+### Global-log:
 `java gitlet.Main global-log`
 
-Find:
+### Find:
+Prints out the ids of all commits that have the given commit message
+
 `java gitlet.Main find [commit message]`
 
-Status:
+### Status:
 `java gitlet.Main status`
 
-Checkout file
+### Checkout file
 `java gitlet.Main checkout -- [file name]`
 
-Checkout commit:
+### Checkout commit:
 `java gitlet.Main checkout [commit id] -- [file name]`
 
-Checkout branch:
+### Checkout branch:
 `java gitlet.Main checkout [commit id] -- [file name]`
 
-Branch:
+### Branch:
 `java gitlet.Main branch [branch name]`
 
-Rm-branch:
+### Rm-branch:
 `java gitlet.Main rm-branch [branch name]`
 
-Reset:
+### Reset:
 `java gitlet.Main reset [commit id]`
 
-Merge:
+### Merge:
 `java gitlet.Main merge [branch name]`
 

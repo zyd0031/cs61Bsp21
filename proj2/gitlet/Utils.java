@@ -101,6 +101,10 @@ class Utils {
         }
     }
 
+    static byte[] readContents(String file) {
+        return readContents(new File(file));
+    }
+
     /** Return the entire contents of FILE as a String.  FILE must
      *  be a normal file.  Throws IllegalArgumentException
      *  in case of problems. */
@@ -137,15 +141,18 @@ class Utils {
         writeContents(new File(file), contents);
     }
 
-    static void writeContents(String filePath, String content){
+    static void writeContents(String filePath, byte[] content) {
         File file = new File(filePath);
+        File parentDir = file.getParentFile();
+        if (parentDir != null) {
+            if (!parentDir.exists()) {
+                parentDir.mkdirs();
+            }
+        }
         writeContents(file, content);
     }
 
-    static void writeContents(String filePath, byte[] content){
-        File file = new File(filePath);
-        writeContents(file, content);
-    }
+
 
     static void appendContents(File file, Object... contents) {
         // Check if the target is a directory
@@ -335,46 +342,5 @@ class Utils {
         String header = "bolb" + content.length + "\0";
         return sha1(header, content);
     }
-
-
-
-
-    public static byte[] getFileContentFromBlobObject(byte[] blob) {
-        byte[] decompress = decompress(blob);
-        int headerEndIndex = findContentBeginIndex(decompress);
-        byte[] content = new byte[decompress.length - headerEndIndex + 1];
-        System.arraycopy(decompress, headerEndIndex, content, 0, content.length);
-        return content;
-    }
-
-    /**
-     * decompress the object to get the contents
-     * @param compressed
-     * @return
-     */
-    private static byte[] decompress(byte[] compressed){
-        try (InflaterInputStream in = new InflaterInputStream(new ByteArrayInputStream(compressed))) {
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * get the index of the beginning of the content
-     * blob <size> \0XXXXXXXXX
-     *               +
-     * @param data
-     * @return
-     */
-    private static int findContentBeginIndex(byte[] data){
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == '\0') {
-                return i + 1;
-            }
-        }
-        throw new IllegalArgumentException("Invaliid Git Object Data");
-    }
-
 
 }

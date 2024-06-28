@@ -117,9 +117,9 @@ public class Repository {
          * c. content different from last commit
          */
         for (String filePath : validFiles){
-            Blob blob = new Blob(filePath);
-            String sha1 = blob.getSha1();
             String relativePath = getRelativePathtoCWD(filePath);
+            Blob blob = new Blob(relativePath);
+            String sha1 = blob.getSha1();
 
             if (index.stagedFilesContainsFile(relativePath)){
                 // file in the stagde area
@@ -393,7 +393,7 @@ public class Repository {
         Commit headCommit = getHeadCommit();
         if (headCommit.treeContainsFile(relativePath)){
             String sha1 = headCommit.treeFileSha1(relativePath);
-            byte[] fileContent = getFileContentsFromBlobSha1(sha1);
+            byte[] fileContent = getBlobContentFromSha1(sha1);
             Utils.writeContents(relativePath, fileContent);
         }else{
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
@@ -421,7 +421,7 @@ public class Repository {
             throw new GitletException(FILE_NOT_EXIST_IN_THAT_COMMIT_MESSAGE);
         }else{
             String sha1 = commit.treeFileSha1(relativePath);
-            byte[] fileContent = getFileContentsFromBlobSha1(sha1);
+            byte[] fileContent = getBlobContentFromSha1(sha1);
             Utils.writeContents(relativePath, fileContent);
         }
     }
@@ -521,6 +521,7 @@ public class Repository {
         isInitialized();
 
         Commit commit = getCommitbyAbbrID(commitID);
+        String resetSha1 = commit.getSha1();
         String currentCommitID = getHeadCommitID();
         Commit currentCommit = getCommitbyId(currentCommitID);
 
@@ -532,9 +533,8 @@ public class Repository {
         deleteAllFiles(CWD);
         addCheckoutCommitFiles(commit);
 
-        // update the HEAD
-        String sha1 = commit.treeFileSha1(currentCommitID);
-        updateCurrentBranch(sha1);
+        // update the HEAD(moves the current branch’s head to that commit node)
+        updateCurrentBranch(resetSha1);
 
         // clear the staging area
         Index index = getIndex();
@@ -625,7 +625,7 @@ public class Repository {
             String splitPointContent = getContent(splitPointCommitFiles, file);
             if (branchContent != null && headContent != null && splitPointContent != null
             && splitPointContent.equals(headContent) && !splitPointContent.equals(branchContent)){
-                byte[] fileContents = getFileContentsFromBlobSha1(branchContent);
+                byte[] fileContents = getBlobContentFromSha1(branchContent);
                 Utils.writeContents(file, fileContents);
                 index.addFileForAddition(file, branchContent);
             }/*else if (branchContent != null && headContent != null && splitPointContent != null
@@ -639,7 +639,7 @@ public class Repository {
             }else if (splitPointContent == null && headContent != null && branchContent == null){
                 // do nothing
             }*/else if (splitPointContent == null && headContent == null && branchContent != null){
-                byte[] fileContents = getFileContentsFromBlobSha1(branchContent);
+                byte[] fileContents = getBlobContentFromSha1(branchContent);
                 Utils.writeContents(file, fileContents);
                 index.addFileForAddition(file, branchContent);
             }else if (splitPointContent != null && headContent != null && branchContent == null
@@ -1010,7 +1010,7 @@ public class Repository {
         for(Map.Entry<String, String> entry : checkoutCommit.getTreeFiles().entrySet()){
             String file1 = entry.getKey();
             String sha1 = entry.getValue();
-            byte[] fileContent = getFileContentsFromBlobSha1(sha1);
+            byte[] fileContent = getBlobContentFromSha1(sha1);
             Utils.writeContents(file1, fileContent);
         }
     }
@@ -1085,17 +1085,17 @@ public class Repository {
         }
     }
 
-    private static byte[] getFileContentsFromBlobSha1(String sha1){
-        byte[] bytes = readContents(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)));
-        byte[] fileContent = getFileContentFromBlobObject(bytes);
-        return fileContent;
+    private byte[] getBlobContentFromSha1(String sha1){
+        Blob blob = readObject(join(OBJECT_DIR, sha1.substring(0, 2), sha1.substring(2)), Blob.class);
+        byte[] content = blob.getContent();
+        return content;
     }
 
-    private static void handleMergeConflict(String file, String headContentSha1, String branchContentSha1){
+    private void handleMergeConflict(String file, String headContentSha1, String branchContentSha1){
         String head = "<<<<<<< HEAD\n";
-        byte[] headContent = getFileContentsFromBlobSha1(headContentSha1);
+        byte[] headContent = getBlobContentFromSha1(headContentSha1);
         String separateLine = "=======\n";
-        byte[] branchContent = getFileContentsFromBlobSha1(branchContentSha1);
+        byte[] branchContent = getBlobContentFromSha1(branchContentSha1);
         String end = ">>>>>>>";
         writeContents(file, head, headContent, separateLine, branchContent, end);
     }

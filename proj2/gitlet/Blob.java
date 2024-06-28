@@ -13,26 +13,29 @@ public class Blob implements Persistable {
 
     private static final long SerialVersionUID = 3L;
     private String filePath;
+    private byte[] fileContent;
+    private String sha1;
 
     public Blob(String filePath){
         this.filePath = filePath;
+        this.fileContent = Utils.readContents(filePath);
+        this.sha1 = sha1();
+
     }
 
-    public String getType(){
-        return "blob";
+    public byte[] getContent(){
+        return fileContent;
     }
 
     @Override
     public String getSha1(){
-        File file = new File(filePath);
-        byte[] content = Utils.readContents(file);
-        String header = "blob " + content.length + "\0";
-        return Utils.sha1(header, content);
+        return sha1;
     }
 
-    public String getFileName(){
-        File file = new File(filePath);
-        return file.getName();
+    public String sha1(){
+        String header = "blob " + fileContent.length + "\0";
+        return Utils.sha1(header, fileContent);
     }
+
 
 }
