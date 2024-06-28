@@ -4,6 +4,7 @@ import gitlet.exception.GitletException;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -605,17 +606,17 @@ public class Repository {
 
         /**
          *      splitPoint   head     branch    result
-         * 1.    A           A         !A        !A      staged for addition
-         * 2.    A          !A          A        !A      do nothing
-         * 3.a   A          B           B                do nothing
-         * 3.b   A          X           X                do nothing
-         * 4.    X          A           X       A        do nothing
-         * 5.    X          X           A       A        staged for addition
-         * 6.    A          A           X       X       staged for remove
-         * 7.    A          X           A       X       do nothing
-         * 8.a   A          B           C       conflict
-         * 8.b   A          B/X         X/B     conflict
-         * 8.c   X          B           C       conflictt
+         * 1.    A           A         !A        !A      staged for addition checked
+         * 2.    A          !A          A        !A      do nothing          checked
+         * 3.a   A          B           B                do nothing          checked
+         * 3.b   A          X           X                do nothing          checked
+         * 4.    X          A           X       A        do nothing          checked
+         * 5.    X          X           A       A        staged for addition checked
+         * 6.    A          A           X       X       staged for remove    checked
+         * 7.    A          X           A       X       do nothing           checked
+         * 8.a   A          B           C       conflict                     checked
+         * 8.b   A          B/X         X/B     conflict                     checked
+         * 8.c   X          B           C       conflictt                    checked
          */
         boolean conflict = false;
         for (String file : files) {
@@ -627,41 +628,55 @@ public class Repository {
                 byte[] fileContents = getBlobContentFromSha1(branchContent);
                 Utils.writeContents(file, fileContents);
                 index.addFileForAddition(file, branchContent);
+                // case 1
             }/*else if (branchContent != null && headContent != null && splitPointContent != null
             && !splitPointContent.equals(headContent) && splitPointContent.equals(branchContent)){
                 // do nothing
-            } else if (branchContent == null && headContent == null && splitPointContent != null) {
+                // case 2
+            } else if (branchContent == null && headContent == null && splitPointContent != null
+            && !splitPointContent.equals(headContent) && headContent.equals(branchContent)) {
                 // do nothing
-            }else if (branchContent != null && headContent != null && splitPointContent != null
-            && !splitPointContent.equals(headContent) && headContent.equals(branchContent)){
+                // case 3.a
+            }else if (branchContent == null && headContent == null && splitPointContent != null){
                 // do nothing
+                // case 3.b
             }else if (splitPointContent == null && headContent != null && branchContent == null){
                 // do nothing
+                // case 4
             }*/else if (splitPointContent == null && headContent == null && branchContent != null){
                 byte[] fileContents = getBlobContentFromSha1(branchContent);
                 Utils.writeContents(file, fileContents);
                 index.addFileForAddition(file, branchContent);
+                // case 5
             }else if (splitPointContent != null && headContent != null && branchContent == null
             && splitPointContent.equals(headContent)){
                 File file1 = new File(file);
-                file1.delete();
+                if (file1.exists()){
+                    file1.delete();
+                }
                 index.addFileForRemoval(file);
+                // case 6
             }/*else if (splitPointContent != null && headContent == null && branchContent != null
                     && splitPointContent.equals(branchContent)){
                 // do nothing
+                // case 7
             }*/else if (branchContent != null && headContent != null && splitPointContent != null
             && !splitPointContent.equals(headContent) && !splitPointContent.equals(branchContent) && !headContent.equals(branchContent)){
                 handleMergeConflict(file, headContent, branchContent);
                 conflict = true;
+                // case 8.a
             }else if (splitPointContent != null && headContent != null && branchContent == null && !splitPointContent.equals(headContent)){
                 handleMergeConflict(file, headContent, branchContent);
                 conflict = true;
+                // case 8.b 1
             }else if (splitPointContent != null && headContent == null && branchContent != null && !splitPointContent.equals(branchContent)){
                 handleMergeConflict(file, headContent, branchContent);
                 conflict = true;
+                // case 8.b 2
             }else if (splitPointContent == null && headContent != null && branchContent != null && !branchContent.equals(headContent)){
                 handleMergeConflict(file, headContent, branchContent);
                 conflict = true;
+                // case 8.c
             }
         }
 
@@ -677,20 +692,22 @@ public class Repository {
 
     private void commitForMerge(String msg, Index index, Commit headCommit, Commit branchCommit) {
 
-        if (index.isClean()){
-            System.out.println(NO_INDEX_CHAGED_MESSAGE);
-            return;
-        }
-
-        Tree parentTree = headCommit.getTree();
-        Tree tree = buildTree(index, parentTree);
         LocalDateTime time = LocalDateTime.now();
         List<String> parentCommits = Arrays.asList(headCommit.getSha1(), branchCommit.getSha1());
-        Commit commit = new Commit(time, msg, parentCommits, index, tree);
+        Commit commit;
+        Tree tree;
+        if (index.isClean()){
+            tree = headCommit.getTree();
+            commit = new Commit(time, msg, parentCommits, index, tree);
+        }else{
+            Tree parentTree = headCommit.getTree();
+            tree = buildTree(index, parentTree);
+            commit = new Commit(time, msg, parentCommits, index, tree);
+            clearIndex(index);
+        }
 
         persistObject(commit);
         persistObject(tree);
-        clearIndex(index);
         updateCurrentBranch(commit.getSha1());
 
         // write commit metadata to logs/HEAD
@@ -1057,7 +1074,6 @@ public class Repository {
         return commit;
     }
 
-
     /**
      * get the parentCommits of this commit(including itself)
      * @param headCommit
@@ -1119,12 +1135,26 @@ public class Repository {
     }
 
     private void handleMergeConflict(String file, String headContentSha1, String branchContentSha1){
-        String head = "<<<<<<< HEAD\n";
-        byte[] headContent = getBlobContentFromSha1(headContentSha1);
-        String separateLine = "=======\n";
-        byte[] branchContent = getBlobContentFromSha1(branchContentSha1);
-        String end = ">>>>>>>";
-        writeContents(file, head, headContent, separateLine, branchContent, end);
+        try{
+            String head = "<<<<<<< HEAD\n";
+            byte[] headContent;
+            if (headContentSha1 == null){
+                headContent = "\n".getBytes("UTF-8");
+            }else{
+                headContent = getBlobContentFromSha1(headContentSha1);
+            }
+            String separateLine = "=======\n";
+            byte[] branchContent;
+            if (branchContentSha1 == null){
+                branchContent = "\n".getBytes("UTF-8");
+            }else{
+                branchContent = getBlobContentFromSha1(branchContentSha1);
+            }
+            String end = ">>>>>>>";
+            writeContents(file, head, headContent, separateLine, branchContent, end);
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -1172,12 +1202,5 @@ public class Repository {
     private String getRelativePathtoCWD(String file){
         return getRelativePathtoCWD(new File(file));
     }
-
-
-
-        
-
-
-
 
 }
